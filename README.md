@@ -4,11 +4,16 @@
 
 ![设备控制界面](docs/images/main.png)
 
-## 下载与运行
+## 下载与安装
 
-在 [Releases](https://github.com/topsai/donner-livejack-control-panel/releases/latest) 下载 Windows x64 压缩包，解压后双击 `DonnerControlPanel.exe`。请保留整个目录。程序自带 .NET 运行时，无需另装 .NET。
+推荐在 [Releases](https://github.com/topsai/donner-livejack-control-panel/releases/latest) 下载 `DonnerControlPanel-v1.15-Setup-win-x64.exe`，双击安装。安装包自带 .NET 运行时和原厂 USB 音频驱动，无需联网或另外下载驱动。
 
-需要先安装 Donner 原厂驱动并连接声卡；程序会自动寻找驱动并检测设备。驱动可从 [Donner 官方下载页](https://us.donnermusic.com/pages/download) 获取。
+- 已有兼容的原厂驱动：自动跳过驱动安装。
+- 缺少兼容驱动：先打开内置的原厂驱动安装向导。允许 Windows 管理员授权并完成向导后，安装程序会检查驱动，再安装中文面板。
+- 驱动安装取消或未成功：提示重试，不会报告安装完成。若原厂向导要求重启，重启后再次运行本安装包。
+- 中文面板默认安装到 `%LOCALAPPDATA%\Programs\DonnerControlPanel`，创建开始菜单和桌面快捷方式；可从 Windows 设置卸载。卸载中文面板保留原厂驱动及个人配置。
+
+也提供便携 ZIP：解压后双击 `DonnerControlPanel.exe`，保留整个目录。便携版不含驱动，需要电脑已经安装兼容驱动。
 
 当前验证的设备为 USB `VID_152A / PID_885C`，系统名称为 `Livejack Audio Interface`。当前支持的控制 API 为 5.0.0.0 / ABI 5.7，程序会校验 DLL 哈希；其他型号或版本暂未验证。
 
@@ -43,6 +48,16 @@
 
 输出位于 `dist\DonnerControlPanel`。脚本先运行测试，再发布前端和辅助进程。
 
+生成包含驱动的安装包，需要 [Inno Setup 6.7.3](https://github.com/jrsoftware/issrc/releases/tag/is-6_7_3) 和原下载包中的、未经修改且带有效数字签名的 `Donner_UsbAudio_v5.0.0_2021-03-29_setup.exe`：
+
+```powershell
+.\build-installer.ps1 -DriverInstaller 'C:\drivers\Donner_UsbAudio_v5.0.0_2021-03-29_setup.exe'
+```
+
+脚本验证原厂签名与 SHA-256，输出 `dist\DonnerControlPanel-v1.15-Setup-win-x64.exe`。源码仓库不保存驱动二进制。安装包内驱动为原厂 5.0.0 版本（SHA-256：`12EF3F0F517B2F00A7EBBA3DBC0CAC978E4A71ECE8599B31FFE853304DD147F0`），保持原文件；安装过程交由原厂向导执行。
+
+安装脚本的简体中文语言文件来自 [Inno Setup 仓库](https://github.com/jrsoftware/issrc/blob/main/Files/Languages/ChineseSimplified.isl)，保留作者署名。
+
 单独运行核心测试：
 
 ```powershell
@@ -66,4 +81,4 @@ dotnet run --project tests/Donner.Tests -c Release
 | `src/Donner.Panel` | WPF 中文界面、托盘、自动启动与面板说明 |
 | `tests/Donner.Tests` | 52 项核心回归检查，无第三方测试框架 |
 
-本仓库和下载包不包含 Donner 原厂安装包、驱动 DLL、SYS 或 INF。品牌名称用于说明兼容设备；此项目非 Donner 官方产品。
+源码仓库与便携 ZIP 不包含原厂驱动；统一安装 EXE 包含未经修改的原厂驱动安装程序。品牌名称用于说明兼容设备；此项目非 Donner 官方产品。
