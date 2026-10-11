@@ -11,8 +11,8 @@
 [Setup]
 AppId={{F92AFC50-1F66-4ECF-A3E9-4F489B2086A8}
 AppName=Donner 中文控制面板
-AppVersion=1.15
-AppPublisher=Donner 中文控制面板项目（非官方）
+AppVersion=1.16
+AppPublisher=topsai
 AppPublisherURL=https://github.com/topsai/donner-livejack-control-panel
 DefaultDirName={localappdata}\Programs\DonnerControlPanel
 DefaultGroupName=Donner 中文控制面板
@@ -26,7 +26,7 @@ WizardStyle=modern
 SetupIconFile=..\src\Donner.Panel\Assets\donner.ico
 UninstallDisplayIcon={app}\DonnerControlPanel.exe
 OutputDir={#SetupOutput}
-OutputBaseFilename=DonnerControlPanel-v1.15-Setup-win-x64
+OutputBaseFilename=DonnerControlPanel-v1.16-Setup-win-x64
 Compression=lzma2
 SolidCompression=yes
 CloseApplications=yes

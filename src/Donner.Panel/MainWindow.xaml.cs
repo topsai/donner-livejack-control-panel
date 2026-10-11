@@ -48,7 +48,8 @@ public partial class MainWindow : Window
     public MainWindow(string[] args)
     {
         InitializeComponent();
-        Title="Donner 中文控制面板 · v1.15";
+        Title="Donner 中文控制面板 · v1.16";
+        AboutVersion.Text="版本 "+typeof(MainWindow).Assembly.GetName().Version?.ToString(3);
         var smoke=Array.IndexOf(args,"--smoke");
         smokeDirectory=smoke>=0 && smoke+1<args.Length?Path.GetFullPath(args[smoke+1]):null;
         var check=Array.IndexOf(args,"--reconnect-check");
@@ -118,6 +119,13 @@ public partial class MainWindow : Window
     }
     private void PageClick(object sender,RoutedEventArgs e)
     {if(sender is MenuItem item&&int.TryParse(item.Tag?.ToString(),out var index)){Pages.SelectedIndex=index;UpdatePageMenu();}}
+    private void ProjectLinkClick(object sender,System.Windows.Navigation.RequestNavigateEventArgs e)
+    {
+        e.Handled=true;
+        try {Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri){UseShellExecute=true});}
+        catch(Exception error) when(error is Win32Exception or InvalidOperationException)
+        {Feedback.Text="无法打开浏览器："+error.Message;}
+    }
     private void UpdatePageMenu()
     {
         foreach(var item in PagesMenu.Items.OfType<MenuItem>())
@@ -212,7 +220,7 @@ public partial class MainWindow : Window
             try
             {
                 Directory.CreateDirectory(reconnectCheckDirectory);
-                File.WriteAllText(Path.Combine(reconnectCheckDirectory,"state.json"),JsonSerializer.Serialize(new {Version="1.15",ProcessId=Environment.ProcessId,Updated=DateTimeOffset.Now,d.Connected,d.Demo,d.Status,d.SampleRate,d.BufferSize,DeviceChanges=deviceChanges,NotificationRegistered=notifications is not null},new JsonSerializerOptions {WriteIndented=true}));
+                File.WriteAllText(Path.Combine(reconnectCheckDirectory,"state.json"),JsonSerializer.Serialize(new {Version="1.16",ProcessId=Environment.ProcessId,Updated=DateTimeOffset.Now,d.Connected,d.Demo,d.Status,d.SampleRate,d.BufferSize,DeviceChanges=deviceChanges,NotificationRegistered=notifications is not null},new JsonSerializerOptions {WriteIndented=true}));
             }
             catch(IOException){}
         }
@@ -534,9 +542,10 @@ public partial class MainWindow : Window
             UpdateLayout();
             var end=PanelGuide.GuideEnd.TranslatePoint(new Point(0,PanelGuide.GuideEnd.ActualHeight),PanelGuide.GuideScroll);
             SaveImage("panel-guide-end.png");
+            Pages.SelectedIndex=5;await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);SaveImage("about.png");
             if(end.Y>PanelGuide.GuideScroll.ActualHeight+1||end.Y<0)throw new Exception($"面板说明末尾不能滚动到可见区域：底部={end.Y},高度={PanelGuide.GuideScroll.ActualHeight},偏移={PanelGuide.GuideScroll.VerticalOffset},最大偏移={PanelGuide.GuideScroll.ScrollableHeight}。");
             Pages.SelectedIndex=0;Render(live);await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);SaveImage("device-small.png");
-            File.WriteAllText(Path.Combine(smokeDirectory!,"smoke-result.json"),JsonSerializer.Serialize(new {Success=true,LiveConnected=live.Connected,live.SampleRate,live.BufferSize,Checks=new[]{"全部静音再次点击取消及部分静音切换","静音按钮文字跟随回读状态","切换输出静音不改变输入或音量","音量输入及方向键按1%调节","相同硬件值回读保留用户百分比","拒绝非法及越界百分比","音量轨道点击定位","拖动停顿及刷新保留鼠标捕获与滑块位置","松开后提交最终音量","开机启动注册、带空格路径引用及关闭","Windows拔插消息使旧连接失效并触发自动重新枚举","原厂音量表","按能力隐藏各控件及占位通道","无设备禁写","真实设备只读检测","未连接状态后台自动枚举并恢复控件","真实与演示后台刷新不重建控件或切换启用状态","刷新保留选项列表","演示静音","中文预设保存","五页渲染"}},new JsonSerializerOptions {WriteIndented=true}));
+            File.WriteAllText(Path.Combine(smokeDirectory!,"smoke-result.json"),JsonSerializer.Serialize(new {Success=true,LiveConnected=live.Connected,live.SampleRate,live.BufferSize,Checks=new[]{"全部静音再次点击取消及部分静音切换","静音按钮文字跟随回读状态","切换输出静音不改变输入或音量","音量输入及方向键按1%调节","相同硬件值回读保留用户百分比","拒绝非法及越界百分比","音量轨道点击定位","拖动停顿及刷新保留鼠标捕获与滑块位置","松开后提交最终音量","开机启动注册、带空格路径引用及关闭","Windows拔插消息使旧连接失效并触发自动重新枚举","原厂音量表","按能力隐藏各控件及占位通道","无设备禁写","真实设备只读检测","未连接状态后台自动枚举并恢复控件","真实与演示后台刷新不重建控件或切换启用状态","刷新保留选项列表","演示静音","中文预设保存","六页渲染"}},new JsonSerializerOptions {WriteIndented=true}));
             System.Windows.Application.Current.Shutdown(0);
         }
         catch(Exception error)
