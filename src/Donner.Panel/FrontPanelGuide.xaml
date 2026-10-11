@@ -1,0 +1,36 @@
+<UserControl x:Class="Donner.Panel.FrontPanelGuide" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+ <UserControl.Resources>
+  <Style x:Key="GuideMarker" TargetType="Button">
+   <Setter Property="Width" Value="36"/><Setter Property="Height" Value="36"/><Setter Property="Background" Value="White"/><Setter Property="Foreground" Value="#12786B"/><Setter Property="FontSize" Value="16"/><Setter Property="FontWeight" Value="Bold"/><Setter Property="Cursor" Value="Hand"/><Setter Property="Margin" Value="0"/>
+   <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border Background="{TemplateBinding Background}" BorderBrush="#12786B" BorderThickness="2" CornerRadius="18"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Opacity" Value="0.8"/></Trigger><Trigger Property="IsKeyboardFocused" Value="True"><Setter Property="BorderBrush" Value="#142A34"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>
+  </Style>
+ </UserControl.Resources>
+ <Grid Margin="20,16,20,16">
+  <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+  <Grid><Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBlock Text="认识声卡正面面板" FontSize="21" FontWeight="SemiBold" VerticalAlignment="Center"/><ComboBox x:Name="PartsPicker" Grid.Column="1" DisplayMemberPath="Title" Width="320" MinWidth="0" Margin="0" SelectionChanged="PartSelected"/></Grid>
+  <TextBlock Grid.Row="1" Text="点击图中编号，下方显示对应说明；选中的编号会变为绿色。" Foreground="#657887" Margin="0,6,0,10"/>
+  <Border Grid.Row="2" Background="#F2F5F7" CornerRadius="8" Padding="8" Margin="0,0,0,12">
+   <Viewbox x:Name="MapView" Stretch="Uniform" MaxHeight="150">
+    <Canvas x:Name="PanelMap" Width="1000" Height="246">
+     <Canvas.Background><ImageBrush ImageSource="Assets/front-panel.jpg" Viewbox="0.125,0.39,0.87,0.285" ViewboxUnits="RelativeToBoundingBox" Stretch="Fill"/></Canvas.Background>
+    </Canvas>
+   </Viewbox>
+  </Border>
+  <ScrollViewer x:Name="GuideScroll" Grid.Row="3" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+   <StackPanel Margin="0,0,8,0">
+    <Border Background="#E9F3F0" BorderBrush="#12786B" BorderThickness="1" CornerRadius="8" Padding="16" Margin="0,0,0,12">
+     <StackPanel x:Name="PartDetail">
+      <TextBlock Text="{Binding Title}" FontSize="17" FontWeight="SemiBold" Foreground="#12786B"/>
+      <TextBlock Text="{Binding Location}" Foreground="#657887" FontSize="12" Margin="0,5,0,12"/>
+      <TextBlock Text="有什么用" FontWeight="SemiBold"/><TextBlock Text="{Binding Function}" Margin="0,4,0,12"/>
+      <TextBlock Text="怎么使用" FontWeight="SemiBold"/><TextBlock Text="{Binding Usage}" Margin="0,4,0,0"/>
+     </StackPanel>
+    </Border>
+    <TextBlock Text="录音时怎么调？" FontWeight="SemiBold" FontSize="16"/>
+    <TextBlock Text="先选好 INST / LINE，再用 GAIN 调输入电平；用 DIRECT / PLAYBACK 决定听现场输入还是电脑回放；最后用 MONITOR 或耳机旋钮调监听响度。" Margin="0,8,0,0"/>
+    <TextBlock Text="如果要听录音软件里的 EQ、混响等效果，将监听偏向 PLAYBACK，并在录音软件中开启输入监听；同时听直接输入和软件监听，可能出现重音或回声。" Margin="0,8,0,14"/>
+    <TextBlock x:Name="GuideEnd" Text="图示来自你提供的说明书照片；功能按面板标识与 Donner Livejack 2x2 产品说明整理。" FontSize="12" Foreground="#657887"/>
+   </StackPanel>
+  </ScrollViewer>
+ </Grid>
+</UserControl>
