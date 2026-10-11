@@ -22,7 +22,7 @@
     <TabItem Header="面板说明"><local:FrontPanelGuide x:Name="PanelGuide"/></TabItem>
     <TabItem Header="关于"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="24,20">
      <StackPanel Orientation="Horizontal"><Image Source="Assets/donner-logo.png" Width="64" Height="64" Margin="0,0,16,0"/><StackPanel VerticalAlignment="Center"><TextBlock Text="Donner 中文控制面板" FontSize="22" FontWeight="SemiBold"/><TextBlock x:Name="AboutVersion" Foreground="#657887" Margin="0,6,0,0"/></StackPanel></StackPanel>
-     <TextBlock Margin="0,24,0,0">作者：<Hyperlink NavigateUri="https://github.com/topsai" RequestNavigate="ProjectLinkClick">topsai</Hyperlink></TextBlock>
+     <TextBlock Margin="0,24,0,0">作者：<Hyperlink NavigateUri="https://github.com/topsai" RequestNavigate="ProjectLinkClick">topsai (范斯特洛夫斯基)</Hyperlink></TextBlock>
      <TextBlock Margin="0,16,0,0" TextWrapping="Wrap">GitHub：<Hyperlink NavigateUri="https://github.com/topsai/donner-livejack-control-panel" RequestNavigate="ProjectLinkClick">github.com/topsai/donner-livejack-control-panel</Hyperlink></TextBlock>
      <TextBlock Margin="0,16,0,0"><Hyperlink NavigateUri="https://github.com/topsai/donner-livejack-control-panel/releases/latest" RequestNavigate="ProjectLinkClick">下载最新版本</Hyperlink><Run Text="    ·    "/><Hyperlink NavigateUri="https://github.com/topsai/donner-livejack-control-panel/issues" RequestNavigate="ProjectLinkClick">反馈问题</Hyperlink></TextBlock>
      <TextBlock Text="适用于 Donner Livejack 的非官方中文控制面板。原厂驱动由 Donner / Thesycon 提供。" Foreground="#657887" TextWrapping="Wrap" Margin="0,24,0,0"/>

@@ -12,7 +12,7 @@
 AppId={{F92AFC50-1F66-4ECF-A3E9-4F489B2086A8}
 AppName=Donner 中文控制面板
 AppVersion=1.16
-AppPublisher=topsai
+AppPublisher=topsai (范斯特洛夫斯基)
 AppPublisherURL=https://github.com/topsai/donner-livejack-control-panel
 DefaultDirName={localappdata}\Programs\DonnerControlPanel
 DefaultGroupName=Donner 中文控制面板
