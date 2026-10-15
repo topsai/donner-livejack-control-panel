@@ -53,7 +53,7 @@ public partial class MainWindow : Window
         StreamModeCombo.ItemsSource=new[]{new DriverOption(1,"按需开启"),new DriverOption(2,"持续开启")};
         OutputFormatCombo.SelectionChanged+=(_,_)=>{if(!rendering&&OutputFormatCombo.SelectedItem is DriverOption option)selectedFormat=option.Value;};
         StreamModeCombo.SelectionChanged+=(_,_)=>{if(!rendering&&StreamModeCombo.SelectedItem is DriverOption option)selectedStreamMode=option.Value;};
-        Title="Donner 中文控制面板 · v1.20";
+        Title="Donner 中文控制面板 · v1.21 · topsai (范斯特洛夫斯基)";
         AboutVersion.Text="版本 "+typeof(MainWindow).Assembly.GetName().Version?.ToString(3);
         var smoke=Array.IndexOf(args,"--smoke");
         smokeDirectory=smoke>=0 && smoke+1<args.Length?Path.GetFullPath(args[smoke+1]):null;
@@ -247,7 +247,7 @@ public partial class MainWindow : Window
             try
             {
                 Directory.CreateDirectory(reconnectCheckDirectory);
-                File.WriteAllText(Path.Combine(reconnectCheckDirectory,"state.json"),JsonSerializer.Serialize(new {Version="1.20",ProcessId=Environment.ProcessId,Updated=DateTimeOffset.Now,d.Connected,d.Demo,d.Status,d.SampleRate,d.BufferSize,DeviceChanges=deviceChanges,NotificationRegistered=notifications is not null},new JsonSerializerOptions {WriteIndented=true}));
+                File.WriteAllText(Path.Combine(reconnectCheckDirectory,"state.json"),JsonSerializer.Serialize(new {Version="1.21",ProcessId=Environment.ProcessId,Updated=DateTimeOffset.Now,d.Connected,d.Demo,d.Status,d.SampleRate,d.BufferSize,DeviceChanges=deviceChanges,NotificationRegistered=notifications is not null},new JsonSerializerOptions {WriteIndented=true}));
             }
             catch(IOException){}
         }
