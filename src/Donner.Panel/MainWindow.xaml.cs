@@ -53,7 +53,7 @@ public partial class MainWindow : Window
         StreamModeCombo.ItemsSource=new[]{new DriverOption(1,"按需开启"),new DriverOption(2,"持续开启")};
         OutputFormatCombo.SelectionChanged+=(_,_)=>{if(!rendering&&OutputFormatCombo.SelectedItem is DriverOption option)selectedFormat=option.Value;};
         StreamModeCombo.SelectionChanged+=(_,_)=>{if(!rendering&&StreamModeCombo.SelectedItem is DriverOption option)selectedStreamMode=option.Value;};
-        Title="Donner 中文控制面板 · v1.18";
+        Title="Donner 中文控制面板 · v1.19";
         AboutVersion.Text="版本 "+typeof(MainWindow).Assembly.GetName().Version?.ToString(3);
         var smoke=Array.IndexOf(args,"--smoke");
         smokeDirectory=smoke>=0 && smoke+1<args.Length?Path.GetFullPath(args[smoke+1]):null;
@@ -234,7 +234,7 @@ public partial class MainWindow : Window
             try
             {
                 Directory.CreateDirectory(reconnectCheckDirectory);
-                File.WriteAllText(Path.Combine(reconnectCheckDirectory,"state.json"),JsonSerializer.Serialize(new {Version="1.18",ProcessId=Environment.ProcessId,Updated=DateTimeOffset.Now,d.Connected,d.Demo,d.Status,d.SampleRate,d.BufferSize,DeviceChanges=deviceChanges,NotificationRegistered=notifications is not null},new JsonSerializerOptions {WriteIndented=true}));
+                File.WriteAllText(Path.Combine(reconnectCheckDirectory,"state.json"),JsonSerializer.Serialize(new {Version="1.19",ProcessId=Environment.ProcessId,Updated=DateTimeOffset.Now,d.Connected,d.Demo,d.Status,d.SampleRate,d.BufferSize,DeviceChanges=deviceChanges,NotificationRegistered=notifications is not null},new JsonSerializerOptions {WriteIndented=true}));
             }
             catch(IOException){}
         }
@@ -279,22 +279,23 @@ public partial class MainWindow : Window
             {
                 UpdateChannel(existing,c);continue;
             }
-            var row=new Grid {Margin=new Thickness(0,0,0,15)};
+            var row=new Grid {Width=90,HorizontalAlignment=HorizontalAlignment.Center,Margin=new Thickness(3,0,3,0),Background=new SolidColorBrush(Color.FromRgb(239,244,246))};
+            row.RowDefinitions.Add(new(){Height=new GridLength(26)});row.RowDefinitions.Add(new(){Height=new GridLength(140)});
+            row.RowDefinitions.Add(new(){Height=new GridLength(30)});row.RowDefinitions.Add(new(){Height=new GridLength(25)});
+            row.ColumnDefinitions.Add(new());row.ColumnDefinitions.Add(new(){Width=new GridLength(22)});
             AddMeter(row,c.Direction,c.Number);
-            row.ColumnDefinitions.Add(new(){Width=new GridLength(70)});row.ColumnDefinitions.Add(new());
-            row.ColumnDefinitions.Add(new(){Width=new GridLength(86)});row.ColumnDefinitions.Add(new(){Width=new GridLength(60)});
-            var label=new TextBlock {Text=c.Name,VerticalAlignment=VerticalAlignment.Center,FontWeight=FontWeights.SemiBold};row.Children.Add(label);
+            var label=new TextBlock {Text=c.Name,HorizontalAlignment=HorizontalAlignment.Center,VerticalAlignment=VerticalAlignment.Center,FontWeight=FontWeights.SemiBold};Grid.SetColumnSpan(label,2);row.Children.Add(label);
             var slider=new Slider {Minimum=0,Maximum=100,TickFrequency=1,SmallChange=1,LargeChange=10,IsSnapToTickEnabled=true,
                 Value=c.Volume is {} value?VolumeScale.ToPercent(value):0,
-                IsEnabled=DeviceCapabilities.HasVolume(c),VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(4,0,15,0)};
-            Grid.SetColumn(slider,1);row.Children.Add(slider);
+                IsEnabled=DeviceCapabilities.HasVolume(c),Orientation=Orientation.Vertical,Width=36,Height=140,HorizontalAlignment=HorizontalAlignment.Center,Style=(Style)FindResource("ChannelFader")};
+            Grid.SetRow(slider,1);row.Children.Add(slider);
             VolumePointer.Attach(slider);
             slider.LostMouseCapture+=(_,_)=>{if(!closed){volumeTimer.Stop();volumeTimer.Start();}};
-            var number=new TextBox {Text=$"{slider.Value:0}",Width=58,Padding=new Thickness(5,3,5,3),VerticalAlignment=VerticalAlignment.Center,ToolTip="输入 0–100，按 Enter 应用；选中滑块后可用方向键每次调 1%。",MaxLength=3};
-            var percentPanel=new StackPanel {Orientation=Orientation.Horizontal,VerticalAlignment=VerticalAlignment.Center};
+            var number=new TextBox {Text=$"{slider.Value:0}",Width=48,Padding=new Thickness(5,3,5,3),VerticalAlignment=VerticalAlignment.Center,ToolTip="输入 0–100，按 Enter 应用；选中推子后可用方向键每次调 1%。",MaxLength=3};
+            var percentPanel=new StackPanel {Orientation=Orientation.Horizontal,HorizontalAlignment=HorizontalAlignment.Center,VerticalAlignment=VerticalAlignment.Center};
             percentPanel.Children.Add(number);percentPanel.Children.Add(new TextBlock {Text="%",Margin=new Thickness(4,0,0,0),VerticalAlignment=VerticalAlignment.Center});
-            Grid.SetColumn(percentPanel,2);row.Children.Add(percentPanel);
-            var mute=new CheckBox {Content="静音",IsChecked=c.Muted,IsEnabled=c.CanMute&&c.Muted is not null,VerticalAlignment=VerticalAlignment.Center};Grid.SetColumn(mute,3);row.Children.Add(mute);
+            Grid.SetRow(percentPanel,2);Grid.SetColumnSpan(percentPanel,2);row.Children.Add(percentPanel);
+            var mute=new CheckBox {Content="静音",IsChecked=c.Muted,IsEnabled=c.CanMute&&c.Muted is not null,HorizontalAlignment=HorizontalAlignment.Center,VerticalAlignment=VerticalAlignment.Center};Grid.SetRow(mute,3);Grid.SetColumnSpan(mute,2);row.Children.Add(mute);
             var view=new ChannelView(row,label,slider,number,mute){State=c};
             UpdateChannel(view,c);
             channelViews.Add((c.Direction,c.Number),view);
@@ -563,6 +564,7 @@ public partial class MainWindow : Window
             await MuteAll();
             if(!session.Snapshot.Channels.Where(c=>c.Direction==1).Select(c=>c.Muted).SequenceEqual(inputMute)||!session.Snapshot.Channels.Select(c=>c.Volume).SequenceEqual(volumeBeforeMute))throw new Exception("切换全部静音改变了输入或音量。");
             var dragSlider=channelViews[(1,1)].Slider;
+            if(dragSlider.Orientation!=Orientation.Vertical)throw new Exception("通道推子未竖向显示。");
             var beforeDrag=session.Snapshot.Channels.Single(c=>c.Direction==1&&c.Number==1).Volume;
             dragSlider.Value=99;await FlushVolumes();
             if(dragSlider.Value!=99)throw new Exception("1%档位回读后跳回其他百分比。");
@@ -581,6 +583,10 @@ public partial class MainWindow : Window
             if(dragSlider.Value!=99)throw new Exception("方向键增加未按1%调节。");
             await Apply([new("volume",1,1,beforeDrag!.Value)]);
             dragSlider.ApplyTemplate();UpdateLayout();
+            VolumePointer.Move(dragSlider,new Point(dragSlider.ActualWidth/2,0));
+            if(dragSlider.Value!=100)throw new Exception("竖向推子顶部不是最大音量。");
+            VolumePointer.Move(dragSlider,new Point(dragSlider.ActualWidth/2,dragSlider.ActualHeight));
+            if(dragSlider.Value!=0)throw new Exception("竖向推子底部不是最小音量。");
             VolumePointer.Move(dragSlider,new Point(dragSlider.ActualWidth/2,dragSlider.ActualHeight/2));
             if(Math.Abs(dragSlider.Value-50)>1)throw new Exception("点击轨道未定位到鼠标位置。");
             Mouse.Capture(dragSlider);
@@ -638,6 +644,8 @@ public partial class MainWindow : Window
             Pages.SelectedIndex=5;await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);SaveImage("about.png");
             if(end.Y>PanelGuide.GuideScroll.ActualHeight+1||end.Y<0)throw new Exception($"面板说明末尾不能滚动到可见区域：底部={end.Y},高度={PanelGuide.GuideScroll.ActualHeight},偏移={PanelGuide.GuideScroll.VerticalOffset},最大偏移={PanelGuide.GuideScroll.ScrollableHeight}。");
             Pages.SelectedIndex=0;Render(live);await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);SaveImage("device-small.png");
+            foreach(var view in channelViews.Values.Where(v=>v.Mute.Visibility==Visibility.Visible))
+                if(view.Mute.TranslatePoint(new Point(0,view.Mute.ActualHeight),Pages).Y>Pages.ActualHeight)throw new Exception("小窗口下静音控件被裁切。");
             File.WriteAllText(Path.Combine(smokeDirectory!,"smoke-result.json"),JsonSerializer.Serialize(new {Success=true,LiveConnected=live.Connected,live.SampleRate,live.BufferSize,Checks=new[]{"全部静音再次点击取消及部分静音切换","静音按钮文字跟随回读状态","切换输出静音不改变输入或音量","音量输入及方向键按1%调节","相同硬件值回读保留用户百分比","拒绝非法及越界百分比","音量轨道点击定位","拖动停顿及刷新保留鼠标捕获与滑块位置","松开后提交最终音量","开机启动注册、带空格路径引用及关闭","Windows拔插消息使旧连接失效并触发自动重新枚举","原厂音量表","按能力隐藏各控件及占位通道","无设备禁写","真实设备只读检测","未连接状态后台自动枚举并恢复控件","真实与演示后台刷新不重建控件或切换启用状态","刷新保留选项列表","演示静音","中文预设保存","七页渲染"}},new JsonSerializerOptions {WriteIndented=true}));
             System.Windows.Application.Current.Shutdown(0);
         }

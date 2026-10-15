@@ -32,7 +32,15 @@ internal static class VolumePointer
     internal static void Move(Slider slider,Point position)
     {
         if(slider.Template.FindName("PART_Track",slider) is not Track track)return;
-        var value=track.ValueFromPoint(slider.TranslatePoint(position,track));
+        var point=slider.TranslatePoint(position,track);
+        bool vertical=slider.Orientation==Orientation.Vertical;
+        var thumb=vertical?track.Thumb.ActualHeight:track.Thumb.ActualWidth;
+        var length=(vertical?track.ActualHeight:track.ActualWidth)-thumb;
+        if(length<=0)return;
+        var ratio=((vertical?point.Y:point.X)-thumb/2)/length;
+        if(vertical)ratio=1-ratio;
+        if(slider.IsDirectionReversed)ratio=1-ratio;
+        var value=slider.Minimum+ratio*(slider.Maximum-slider.Minimum);
         if(double.IsFinite(value))slider.Value=Math.Clamp(Math.Round(value),slider.Minimum,slider.Maximum);
     }
 }
