@@ -13,6 +13,9 @@ internal sealed class LiveLevels : IDisposable
         private readonly WasapiCapture capture;
         private readonly bool floating;
         private float left,right;
+        private float latestLeft,latestRight;
+        private long receivedAt;
+        private bool dataReady;
         public volatile bool Available;
         public int Packets;
         public string? Error;
@@ -34,7 +37,7 @@ internal sealed class LiveLevels : IDisposable
                     try
                     {
                         var peaks=AudioPeaks.Stereo(e.Buffer.AsSpan(0,e.BytesRecorded),format.BitsPerSample,format.Channels,floating);
-                        lock(gate){left=Math.Max(left,peaks.Left);right=Math.Max(right,peaks.Right);}
+                        lock(gate){left=Math.Max(left,peaks.Left);right=Math.Max(right,peaks.Right);dataReady=true;receivedAt=Environment.TickCount64;}
                     }
                     catch(InvalidDataException error){Error=error.Message;Available=false;}
                 };
@@ -43,7 +46,14 @@ internal sealed class LiveLevels : IDisposable
             }
             catch {try {created?.Dispose();}finally {device.Dispose();}throw;}
         }
-        public (float,float) Read(){lock(gate){var result=(left,right);left=right=0;return result;}}
+        public (float,float) Read()
+        {
+            lock(gate)
+            {
+                if(dataReady){latestLeft=left;latestRight=right;left=right=0;dataReady=false;}
+                return Environment.TickCount64-receivedAt<=120?(latestLeft,latestRight):(0,0);
+            }
+        }
         public void Dispose(){Available=false;try {capture.StopRecording();}finally {try {capture.Dispose();}finally {device.Dispose();}}}
     }
     private Source? input,output;
