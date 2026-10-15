@@ -25,7 +25,7 @@ public partial class MainWindow
         try {previous?.Dispose();}
         catch(Exception error) when(error is System.Runtime.InteropServices.COMException or InvalidOperationException) { }
         Array.Clear(displayedPeaks);
-        foreach(var view in meterViews.Values)view.Visibility=Visibility.Collapsed;
+        foreach(var view in meterViews.Values)view.Visibility=Visibility.Hidden;
     }
     private void MeterCheckClick(object sender,RoutedEventArgs e){StopMeters();UpdateMeters();}
     private void UpdateMeters()
@@ -49,7 +49,7 @@ public partial class MainWindow
             var (direction,channel)=pair.Key;int index=(direction==1?0:2)+(int)channel-1;
             if(index is <0 or >3)continue;
             var view=pair.Value;bool available=direction==1?levels.InputAvailable:levels.OutputAvailable;
-            view.Visibility=available?Visibility.Visible:Visibility.Collapsed;
+            view.Visibility=available?Visibility.Visible:Visibility.Hidden;
             if(!available){displayedPeaks[index]=0;continue;}
             displayedPeaks[index]=Math.Max(peaks[index],displayedPeaks[index]*.65f);
             view.Peak=displayedPeaks[index];
@@ -57,7 +57,7 @@ public partial class MainWindow
     }
     private void AddMeter(Grid row,uint direction,uint channel)
     {
-        var bar=new ChannelMeter {Width=14,Height=136,Margin=new Thickness(0,2,4,2),Visibility=Visibility.Collapsed,ToolTip=direction==1?"输入信号实时峰值":"电脑送往声卡的输出峰值（不包含硬件直通监听）"};
+        var bar=new ChannelMeter {Width=14,Height=136,Margin=new Thickness(0,2,4,2),Visibility=Visibility.Hidden,ToolTip=direction==1?"输入信号实时峰值":"电脑送往声卡的输出峰值（不包含硬件直通监听）"};
         Grid.SetRow(bar,1);Grid.SetColumn(bar,1);row.Children.Add(bar);
         meterViews[(direction,channel)]=bar;
     }

@@ -36,7 +36,7 @@ public partial class MainWindow : Window
     private Forms.NotifyIcon? tray;
     private System.Drawing.Icon? trayIcon;
     private Forms.ToolStripItem? trayMute;
-    private bool busy,rendering,closed;
+    private bool busy,rendering,closed,interactionLocked;
     private uint? selectedFormat,selectedStreamMode;
     private sealed record DriverOption(uint Value,string Label);
     private sealed record RateOption(uint Value,string Label);
@@ -53,7 +53,7 @@ public partial class MainWindow : Window
         StreamModeCombo.ItemsSource=new[]{new DriverOption(1,"按需开启"),new DriverOption(2,"持续开启")};
         OutputFormatCombo.SelectionChanged+=(_,_)=>{if(!rendering&&OutputFormatCombo.SelectedItem is DriverOption option)selectedFormat=option.Value;};
         StreamModeCombo.SelectionChanged+=(_,_)=>{if(!rendering&&StreamModeCombo.SelectedItem is DriverOption option)selectedStreamMode=option.Value;};
-        Title="Donner 中文控制面板 · v1.19";
+        Title="Donner 中文控制面板 · v1.20";
         AboutVersion.Text="版本 "+typeof(MainWindow).Assembly.GetName().Version?.ToString(3);
         var smoke=Array.IndexOf(args,"--smoke");
         smokeDirectory=smoke>=0 && smoke+1<args.Length?Path.GetFullPath(args[smoke+1]):null;
@@ -81,10 +81,13 @@ public partial class MainWindow : Window
         };
         PreviewKeyDown+=async(_,e)=>
         {
+            if(interactionLocked&&(IsOperationInput(e.OriginalSource)||e.Key==Key.F5||Keyboard.Modifiers==ModifierKeys.Control))
+            {e.Handled=true;return;}
             if(e.Key==Key.F5){e.Handled=true;await Detect();}
             else if(Keyboard.Modifiers==ModifierKeys.Control && e.Key==Key.M){e.Handled=true;await MuteAll();}
             else if(Keyboard.Modifiers==ModifierKeys.Control && e.Key==Key.S){e.Handled=true;await SavePreset();}
         };
+        PreviewMouseDown+=(_,e)=>{if(interactionLocked&&IsOperationInput(e.OriginalSource))e.Handled=true;};
         StateChanged+=(_,_)=>{if(WindowState==WindowState.Minimized && tray is not null)Hide();};
         Closed+=(_,_)=>{closed=true;volumeTimer.Stop();refreshTimer.Stop();reconnectTimer.Stop();notifications?.Dispose();client.Dispose();tray?.Dispose();trayIcon?.Dispose();};
         Loaded+=async(_,_)=>
@@ -147,11 +150,21 @@ public partial class MainWindow : Window
     }
     private async Task Run(Func<Task> action,bool quiet=false)
     {
-        if(busy||closed)return;busy=true;if(!quiet)EnableControls();
+        if(busy||closed)return;busy=true;interactionLocked=!quiet;
         try {await action();}
         catch(Exception e) when(e is IOException or InvalidDataException or TimeoutException or JsonException or Win32Exception or UnauthorizedAccessException)
         {Record(e.Message);}
-        finally {busy=false;if(!closed){Render();if(!quiet)Activate();}}
+        finally {busy=false;interactionLocked=false;if(!closed)Render();}
+    }
+    private bool IsOperationInput(object source)
+    {
+        // Reject repeated writes without changing enabled styling, layout or focus.
+        for(var node=source as DependencyObject;node is not null;node=node is Visual?VisualTreeHelper.GetParent(node):LogicalTreeHelper.GetParent(node))
+            if(ReferenceEquals(node,ChannelsPanel)||ReferenceEquals(node,DetectButton)||ReferenceEquals(node,RateCombo)||ReferenceEquals(node,RateApply)||
+               ReferenceEquals(node,BufferCombo)||ReferenceEquals(node,BufferApply)||ReferenceEquals(node,SafeModeCheck)||ReferenceEquals(node,OutputFormatCombo)||
+               ReferenceEquals(node,OutputFormatApply)||ReferenceEquals(node,StreamModeCombo)||ReferenceEquals(node,StreamModeApply)||ReferenceEquals(node,LinkedCheck)||
+               ReferenceEquals(node,MuteAllButton)||ReferenceEquals(node,SavePresetButton)||ReferenceEquals(node,ApplyPresetButton))return true;
+        return false;
     }
     private async Task Detect()
     {
@@ -184,20 +197,20 @@ public partial class MainWindow : Window
     private void EnableControls(DeviceSnapshot? snapshot=null)
     {
         var d=snapshot??session.Snapshot;
-        DetectButton.IsEnabled=!busy;
-        ChannelsPanel.IsEnabled=!busy && d.Connected;
-        RateCombo.IsEnabled=RateApply.IsEnabled=!busy && d.Connected && d.SampleRates.Length>0;
-        BufferCombo.IsEnabled=BufferApply.IsEnabled=!busy && d.Connected && d.DeviceCount==1 && d.BufferRate>0 && d.BufferSizes.Length>0;
+        DetectButton.IsEnabled=true;
+        ChannelsPanel.IsEnabled=d.Connected;
+        RateCombo.IsEnabled=RateApply.IsEnabled=d.Connected && d.SampleRates.Length>0;
+        BufferCombo.IsEnabled=BufferApply.IsEnabled=d.Connected && d.DeviceCount==1 && d.BufferRate>0 && d.BufferSizes.Length>0;
         SafeModeCheck.Visibility=d.Connected&&d.SafeMode is not null&&d.DeviceCount==1&&d.BufferSize is not null?Visibility.Visible:Visibility.Collapsed;
-        SafeModeCheck.IsEnabled=!busy&&d.Connected&&d.BufferRate>0;
+        SafeModeCheck.IsEnabled=d.Connected&&d.BufferRate>0;
         OutputFormatSection.Visibility=d.Connected&&d.Driver.OutputFormats.Length>1&&d.Driver.OutputFormat is not null&&d.Driver.FormatSelectionMode==1&&d.Driver.Dsd==false?Visibility.Visible:Visibility.Collapsed;
-        OutputFormatCombo.IsEnabled=OutputFormatApply.IsEnabled=!busy&&d.Connected&&d.Driver.FormatSelectionMode==1&&d.Driver.Dsd==false&&d.Driver.WdmClients==0&&d.Driver.AsioClients==0;
+        OutputFormatCombo.IsEnabled=OutputFormatApply.IsEnabled=d.Connected&&d.Driver.FormatSelectionMode==1&&d.Driver.Dsd==false&&d.Driver.WdmClients==0&&d.Driver.AsioClients==0;
         StreamModeSection.Visibility=d.Connected&&d.Driver.StreamingMode is 1 or 2?Visibility.Visible:Visibility.Collapsed;
-        StreamModeCombo.IsEnabled=StreamModeApply.IsEnabled=!busy&&d.Connected&&d.Driver.WdmClients==0&&d.Driver.AsioClients==0;
-        LinkedCheck.IsEnabled=!busy && d.Connected && new uint[]{1,2}.All(n=>d.Channels.Any(c=>c.Direction==0&&c.Number==n&&c.CanVolume&&c.Volume is not null));
-        MuteAllButton.IsEnabled=!busy && d.Connected && d.Channels.Any(c=>c.Direction==0&&c.CanMute&&c.Muted is not null);
-        SavePresetButton.IsEnabled=!busy && d.Connected;
-        ApplyPresetButton.IsEnabled=!busy && d.Connected && PresetsList.SelectedItem is Preset;
+        StreamModeCombo.IsEnabled=StreamModeApply.IsEnabled=d.Connected&&d.Driver.WdmClients==0&&d.Driver.AsioClients==0;
+        LinkedCheck.IsEnabled=d.Connected && new uint[]{1,2}.All(n=>d.Channels.Any(c=>c.Direction==0&&c.Number==n&&c.CanVolume&&c.Volume is not null));
+        MuteAllButton.IsEnabled=d.Connected && d.Channels.Any(c=>c.Direction==0&&c.CanMute&&c.Muted is not null);
+        SavePresetButton.IsEnabled=d.Connected;
+        ApplyPresetButton.IsEnabled=d.Connected && PresetsList.SelectedItem is Preset;
         RateSection.Visibility=DeviceCapabilities.HasRate(d)?Visibility.Visible:Visibility.Collapsed;
         BufferSection.Visibility=DeviceCapabilities.HasBuffer(d)?Visibility.Visible:Visibility.Collapsed;
         var audio=DeviceCapabilities.HasRate(d)||DeviceCapabilities.HasBuffer(d);
@@ -207,7 +220,7 @@ public partial class MainWindow : Window
         MuteAllButton.Visibility=mute?Visibility.Visible:Visibility.Collapsed;
         var muteLabel=MuteOutputs(d) is {Length:>0} outputs&&outputs.All(c=>c.Muted==true)?"取消输出静音":"输出全部静音";
         MuteAllButton.Content=muteLabel;
-        if(trayMute is not null){trayMute.Visible=mute;trayMute.Enabled=!busy&&mute;trayMute.Text=muteLabel;}
+        if(trayMute is not null){trayMute.Visible=mute;trayMute.Enabled=mute;trayMute.Text=muteLabel;}
         if(Feedback.Text.StartsWith("快捷键："))Feedback.Text="快捷键：F5 重新检测 · Ctrl+S 保存预设"+(mute?" · Ctrl+M 切换输出静音":"");
         var channels=d.Connected&&d.Channels.Any(c=>DeviceCapabilities.HasVolume(c)||DeviceCapabilities.HasMute(c));
         ChannelHeader.Visibility=ChannelsPanel.Visibility=channels?Visibility.Visible:Visibility.Collapsed;
@@ -234,7 +247,7 @@ public partial class MainWindow : Window
             try
             {
                 Directory.CreateDirectory(reconnectCheckDirectory);
-                File.WriteAllText(Path.Combine(reconnectCheckDirectory,"state.json"),JsonSerializer.Serialize(new {Version="1.19",ProcessId=Environment.ProcessId,Updated=DateTimeOffset.Now,d.Connected,d.Demo,d.Status,d.SampleRate,d.BufferSize,DeviceChanges=deviceChanges,NotificationRegistered=notifications is not null},new JsonSerializerOptions {WriteIndented=true}));
+                File.WriteAllText(Path.Combine(reconnectCheckDirectory,"state.json"),JsonSerializer.Serialize(new {Version="1.20",ProcessId=Environment.ProcessId,Updated=DateTimeOffset.Now,d.Connected,d.Demo,d.Status,d.SampleRate,d.BufferSize,DeviceChanges=deviceChanges,NotificationRegistered=notifications is not null},new JsonSerializerOptions {WriteIndented=true}));
             }
             catch(IOException){}
         }
@@ -664,6 +677,23 @@ public partial class MainWindow : Window
             for(var refresh=0;refresh<3;refresh++)await Run(async()=>await session.RefreshAsync(),quiet:true);
             if(!ReferenceEquals(slider,((Grid)ChannelsPanel.Children[0]).Children.OfType<Slider>().Single()))throw new Exception("后台刷新重建了音量控件。");
             if(transitions!=0)throw new Exception("后台刷新切换了控件启用状态。");
+            await Run(async()=>
+            {
+                if(!slider.IsEnabled||!RateCombo.IsEnabled||!MuteAllButton.IsEnabled)
+                    throw new Exception("点击操作使无关控件整页变灰。");
+                var repeat=new MouseButtonEventArgs(Mouse.PrimaryDevice,Environment.TickCount,MouseButton.Left)
+                    {RoutedEvent=Mouse.PreviewMouseDownEvent};
+                RateApply.RaiseEvent(repeat);
+                if(!repeat.Handled)throw new Exception("操作期间未阻止重复点击。");
+                await Task.Delay(30);
+            });
+            if(session.Snapshot.Demo)
+            {
+                var channel=session.Snapshot.Channels.First(c=>DeviceCapabilities.HasMute(c));
+                await Apply([new("mute",channel.Direction,channel.Number,channel.Muted==true?0:1)]);
+                await Apply([new("mute",channel.Direction,channel.Number,channel.Muted==true?1:0)]);
+            }
+            if(transitions!=0)throw new Exception("点击操作切换了无关控件的启用状态。");
             if(!ReferenceEquals(rates,RateCombo.ItemsSource)||!ReferenceEquals(buffers,BufferCombo.ItemsSource))throw new Exception("后台刷新重建了相同的选项列表。");
         }
         finally {slider.IsEnabledChanged-=track;}
