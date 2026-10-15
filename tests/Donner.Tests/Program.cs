@@ -27,6 +27,18 @@ void Test(string name, Action action) { try { action(); passed++; Console.WriteL
 void Check(bool value, string message) { if(!value) throw new Exception(message); }
 void Reject(Action action) { try { action(); } catch(InvalidDataException) { return; }
     throw new Exception("应拒绝该输入"); }
+Test("电平按左右通道独立计算，浮点异常不污染结果",()=>
+{
+    var bytes=new byte[16];BitConverter.GetBytes(.5f).CopyTo(bytes,0);BitConverter.GetBytes(-.25f).CopyTo(bytes,4);BitConverter.GetBytes(float.NaN).CopyTo(bytes,8);BitConverter.GetBytes(2f).CopyTo(bytes,12);
+    var p=AudioPeaks.Stereo(bytes,32,2,true);Check(p.Left==.5f&&p.Right==1,"通道串扰或越界");
+});
+Test("24 位负数电平正确，残缺帧和静音安全",()=>
+{
+    var p=AudioPeaks.Stereo([0,0,128,0,0,64,1],24,2,false);Check(p.Left==1&&p.Right==.5f,"24 位符号错误");
+    Check(AudioPeaks.Stereo([],16,2,false)==(0,0)&&double.IsNegativeInfinity(AudioPeaks.Db(0)),"静音错误");
+    Check(Math.Abs(AudioPeaks.Db(.5f)+6.0206)<.001,"dBFS 换算错误");
+    Reject(()=>AudioPeaks.Stereo([],32,1,true));
+});
 Test("合法音量和采样率可应用",()=>{ControlPolicy.Validate(device,new("volume",0,1,-2560));ControlPolicy.Validate(device,new("rate",Value:44100));});
 Test("无设备拒绝写入",()=>Reject(()=>ControlPolicy.Validate(device with {Connected=false},new("rate",Value:48000))));
 Test("越界音量拒绝",()=>Reject(()=>ControlPolicy.Validate(device,new("volume",0,1,1))));

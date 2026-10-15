@@ -15,5 +15,6 @@ try {
     & $sdk publish src\Donner.Host -c Release -r win-x64 --self-contained true -o dist\DonnerControlPanel -v minimal
     if ($LASTEXITCODE -ne 0) {throw 'Host publish failed.'}
     Copy-Item -LiteralPath README.md -Destination dist\DonnerControlPanel\使用说明.md -Force
+    Copy-Item -LiteralPath THIRD_PARTY_NOTICES.txt -Destination dist\DonnerControlPanel\THIRD_PARTY_NOTICES.txt -Force
     Write-Output (Join-Path $taskRoot 'dist\DonnerControlPanel\DonnerControlPanel.exe')
 } finally {Pop-Location}

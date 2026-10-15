@@ -53,7 +53,7 @@ public partial class MainWindow : Window
         StreamModeCombo.ItemsSource=new[]{new DriverOption(1,"按需开启"),new DriverOption(2,"持续开启")};
         OutputFormatCombo.SelectionChanged+=(_,_)=>{if(!rendering&&OutputFormatCombo.SelectedItem is DriverOption option)selectedFormat=option.Value;};
         StreamModeCombo.SelectionChanged+=(_,_)=>{if(!rendering&&StreamModeCombo.SelectedItem is DriverOption option)selectedStreamMode=option.Value;};
-        Title="Donner 中文控制面板 · v1.17";
+        Title="Donner 中文控制面板 · v1.18";
         AboutVersion.Text="版本 "+typeof(MainWindow).Assembly.GetName().Version?.ToString(3);
         var smoke=Array.IndexOf(args,"--smoke");
         smokeDirectory=smoke>=0 && smoke+1<args.Length?Path.GetFullPath(args[smoke+1]):null;
@@ -67,6 +67,7 @@ public partial class MainWindow : Window
         presets=new PresetStore(Path.Combine(storage,"presets"));
         var start=new ProcessStartInfo(Path.Combine(AppContext.BaseDirectory,"Donner.Host.exe"));
         client=new HostClient(start);session=new DeviceSession(client.SendAsync);
+        InitializeMeters();
         RateCombo.SelectionChanged+=(_,_)=>{if(!rendering&&RateCombo.SelectedItem is RateOption rate)selection.Rate=rate.Value;};
         BufferCombo.SelectionChanged+=(_,_)=>{if(!rendering&&BufferCombo.SelectedItem is uint size)selection.Buffer=size;};
         Pages.SelectionChanged+=(_,_)=>UpdatePageMenu();
@@ -175,6 +176,7 @@ public partial class MainWindow : Window
     private void DeviceChanged(string message)
     {
         if(closed||session.Snapshot.Demo)return;
+        StopMeters();
         deviceChanges++;pending.Drain();volumeTimer.Stop();selection.Clear();
         session.InvalidateHardware();Record(message+"，旧连接已失效。");Render();
         reconnectTimer.Stop();reconnectTimer.Start();
@@ -232,7 +234,7 @@ public partial class MainWindow : Window
             try
             {
                 Directory.CreateDirectory(reconnectCheckDirectory);
-                File.WriteAllText(Path.Combine(reconnectCheckDirectory,"state.json"),JsonSerializer.Serialize(new {Version="1.17",ProcessId=Environment.ProcessId,Updated=DateTimeOffset.Now,d.Connected,d.Demo,d.Status,d.SampleRate,d.BufferSize,DeviceChanges=deviceChanges,NotificationRegistered=notifications is not null},new JsonSerializerOptions {WriteIndented=true}));
+                File.WriteAllText(Path.Combine(reconnectCheckDirectory,"state.json"),JsonSerializer.Serialize(new {Version="1.18",ProcessId=Environment.ProcessId,Updated=DateTimeOffset.Now,d.Connected,d.Demo,d.Status,d.SampleRate,d.BufferSize,DeviceChanges=deviceChanges,NotificationRegistered=notifications is not null},new JsonSerializerOptions {WriteIndented=true}));
             }
             catch(IOException){}
         }
@@ -270,7 +272,7 @@ public partial class MainWindow : Window
         var channels=device.Connected?device.Channels.Where(c=>DeviceCapabilities.HasVolume(c)||DeviceCapabilities.HasMute(c)).ToArray():[];
         var keys=channels.Select(c=>(c.Direction,c.Number)).ToArray();
         var oldKeys=ChannelsPanel.Children.Cast<Grid>().Select(row=>channelViews.Single(p=>ReferenceEquals(p.Value.Row,row)).Key);
-        if(!oldKeys.SequenceEqual(keys)){ChannelsPanel.Children.Clear();channelViews.Clear();}
+        if(!oldKeys.SequenceEqual(keys)){ChannelsPanel.Children.Clear();channelViews.Clear();meterViews.Clear();}
         foreach(var c in channels)
         {
             if(channelViews.TryGetValue((c.Direction,c.Number),out var existing))
@@ -278,6 +280,7 @@ public partial class MainWindow : Window
                 UpdateChannel(existing,c);continue;
             }
             var row=new Grid {Margin=new Thickness(0,0,0,15)};
+            AddMeter(row,c.Direction,c.Number);
             row.ColumnDefinitions.Add(new(){Width=new GridLength(70)});row.ColumnDefinitions.Add(new());
             row.ColumnDefinitions.Add(new(){Width=new GridLength(86)});row.ColumnDefinitions.Add(new(){Width=new GridLength(60)});
             var label=new TextBlock {Text=c.Name,VerticalAlignment=VerticalAlignment.Center,FontWeight=FontWeights.SemiBold};row.Children.Add(label);
@@ -361,12 +364,15 @@ public partial class MainWindow : Window
     }
     private async Task Apply(Setting[] changes)
     {
-        await Run(async()=>
+        bool driverChange=changes.Any(s=>s.Kind is not ("volume" or "mute"));
+        if(driverChange){meterSuspended=true;StopMeters();}
+        try {await Run(async()=>
         {
+            if(driverChange&&!session.Snapshot.Demo)await session.RefreshAsync();
             var reply=await session.ApplyAsync(changes);
             Record(reply.Message);
             foreach(var result in reply.Results??[])Record($"{result.Operation}：{(result.Success?"成功":"失败")} · {result.Message}");
-        });
+        });} finally {meterSuspended=false;}
     }
     private async void DetectClick(object sender,RoutedEventArgs e)=>await Detect();
     private async void RateClick(object sender,RoutedEventArgs e)
@@ -438,8 +444,10 @@ public partial class MainWindow : Window
     private async void ApplyPresetClick(object sender,RoutedEventArgs e)
     {
         if(PresetsList.SelectedItem is not Preset p)return;await FlushVolumes();selection.Clear();selectedFormat=null;selectedStreamMode=null;
-        await Run(async()=>{ControlPolicy.ValidatePreset(session.Snapshot,p);var reply=await session.ApplyAsync(p.Settings);
-            if(reply.Success)session.Linked=p.Linked;Record(reply.Message);foreach(var result in reply.Results??[])Record($"{result.Operation}：{result.Message}");});
+        meterSuspended=true;StopMeters();
+        try {await Run(async()=>{if(!session.Snapshot.Demo)await session.RefreshAsync();ControlPolicy.ValidatePreset(session.Snapshot,p);var reply=await session.ApplyAsync(p.Settings);
+            if(reply.Success)session.Linked=p.Linked;Record(reply.Message);foreach(var result in reply.Results??[])Record($"{result.Operation}：{result.Message}");});}
+        finally {meterSuspended=false;}
     }
     private string Summary()
     {
@@ -473,6 +481,24 @@ public partial class MainWindow : Window
             Directory.CreateDirectory(smokeDirectory!);await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);
             SaveImage("device.png");
             var live=session.Snapshot;
+            if(live.Connected)
+            {
+                meterDevice=live.DeviceId;levels=new();
+                for(int i=0;i<25;i++){await Task.Delay(40);UpdateMeters();}
+                File.WriteAllText(Path.Combine(smokeDirectory!,"live-levels.json"),JsonSerializer.Serialize(new {levels.InputAvailable,levels.OutputAvailable,levels.InputPackets,levels.OutputPackets,levels.Error,Peaks=displayedPeaks},new JsonSerializerOptions {WriteIndented=true}));
+                SaveImage("levels-live.png");
+                var source=typeof(LiveLevels).GetField("input",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)?.GetValue(levels);
+                var capture=source?.GetType().GetField("capture",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)?.GetValue(source) as NAudio.CoreAudioApi.WasapiCapture;
+                if(capture is not null&&levels.InputAvailable)
+                {
+                    capture.StopRecording();await Task.Delay(200);
+                    if(levels.InputAvailable)throw new Exception("采集停止后状态未清除。");
+                    var retryDeadline=DateTime.UtcNow.AddSeconds(5);
+                    while(!levels.InputAvailable&&DateTime.UtcNow<retryDeadline){await Task.Delay(100);levels.RetryStopped();}
+                    if(!levels.InputAvailable)throw new Exception("同一设备的采集停止后未自动恢复。");
+                }
+                StopMeters();
+            }
             Pages.SelectedIndex=6;await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);SaveImage("driver-live.png");Pages.SelectedIndex=0;
             if(Pages.SelectedIndex!=0||Pages.SelectedContent is null)throw new Exception("启动时未显示设备控制页。");
             foreach(var menu in PagesMenu.Items.OfType<MenuItem>())
