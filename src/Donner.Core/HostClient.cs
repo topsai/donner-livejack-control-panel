@@ -84,6 +84,15 @@ public static class PresetCapture
         if(device.SampleRate is {} rate && device.SampleRates.Contains(rate)) settings.Add(new("rate",Value:(int)rate));
         if(device.BufferSize is {} size && device.DeviceCount==1 && device.BufferRate!=0 && device.BufferSizes.Contains(size))
             settings.Add(new("buffer",Value:(int)size));
+        if(device.SafeMode is {} safe&&device.DeviceCount==1&&device.BufferRate>0&&device.BufferSize is not null)
+            settings.Add(new("safemode",Value:safe?1:0));
+        if(device.Driver.WdmClients==0&&device.Driver.AsioClients==0)
+        {
+            if(device.Driver.StreamingMode is 1 or 2)
+                settings.Add(new("streammode",Value:(int)device.Driver.StreamingMode.Value));
+            if(device.Driver.FormatSelectionMode==1&&device.Driver.Dsd==false&&device.Driver.OutputFormat is {} format&&device.Driver.OutputFormats.Any(f=>f.Id==format.Id))
+                settings.Add(new("format",Value:(int)format.Id));
+        }
         var preset=new Preset(1,name,device.DeviceId,device.Demo,linked,settings.ToArray());
         ControlPolicy.ValidatePreset(device,preset);return preset;
     }

@@ -14,7 +14,8 @@ public sealed class DeviceSession(Func<HostRequest,Task<HostReply>> send)
         generation++;Linked=true;
         Snapshot=enabled?new() {Connected=true,Demo=true,Status="演示模式 · 不会控制声卡",DeviceId="demo:livejack",DeviceCount=1,
             SampleRate=48000,SampleRates=[44100,48000,88200,96000,176400,192000],BufferSize=256,BufferRate=48000,
-            BufferSizes=[8,16,32,64,128,256,512,1024,2048],Channels=[
+            BufferSizes=[8,16,32,64,128,256,512,1024,2048],AsioFlags=0,
+            Driver=new() {InputFormat=new(131073,24,2,"PCM"),OutputFormat=new(65537,24,2,"PCM"),OutputFormats=[new(65537,24,2,"PCM"),new(65538,16,2,"PCM")],FormatSelectionMode=1,Dsd=false,Clock=new(41,"内部时钟",true,48000),Streaming=false,WdmClients=0,AsioClients=0,StreamingMode=1},Channels=[
                 new(1,1,"输入 1",true,true,-32512,0,256,-2048,false),new(1,2,"输入 2",true,true,-32512,0,256,-4096,false),
                 new(0,1,"输出左",true,true,-32512,0,256,-6144,false),new(0,2,"输出右",true,true,-32512,0,256,-6144,false)],
             Diagnostics=new() {["模式"]="演示数据，未向任何设备发送请求"} }:new() {Status="已退出演示，请重新检测真实设备"};
@@ -28,6 +29,9 @@ public sealed class DeviceSession(Func<HostRequest,Task<HostReply>> send)
                 Snapshot=s.Kind switch {
                     "rate"=>Snapshot with {SampleRate=(uint)s.Value,BufferRate=(uint)s.Value},
                     "buffer"=>Snapshot with {BufferSize=(uint)s.Value},
+                    "safemode"=>Snapshot with {AsioFlags=NativeLayouts.BufferFlags(Snapshot,s.Value==1)},
+                    "format"=>Snapshot with {Driver=Snapshot.Driver with {OutputFormat=Snapshot.Driver.OutputFormats.Single(f=>f.Id==s.Value)}},
+                    "streammode"=>Snapshot with {Driver=Snapshot.Driver with {StreamingMode=(uint)s.Value}},
                     "volume"=>Snapshot with {Channels=Snapshot.Channels.Select(c=>c.Direction==s.Direction&&c.Number==s.Channel?c with {Volume=(short)s.Value}:c).ToArray()},
                     "mute"=>Snapshot with {Channels=Snapshot.Channels.Select(c=>c.Direction==s.Direction&&c.Number==s.Channel?c with {Muted=s.Value==1}:c).ToArray()},
                     _=>Snapshot};

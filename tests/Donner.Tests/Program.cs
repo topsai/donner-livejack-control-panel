@@ -39,6 +39,64 @@ Test("左右联动同时产生两路音量写入而不取消静音",()=>{var cha
 Test("联动值不兼容另一侧时拒绝整组操作",()=>Reject(()=>ControlPolicy.VolumeChanges(device,0,1,-15360,true)));
 Test("输入通道不参与输出联动",()=>{var d=device with {Channels=[new(1,1,"输入",true,true,-25600,0,256,-2560,false)]};Check(ControlPolicy.VolumeChanges(d,1,1,-2560,true).Length==1,"只能写输入1");});
 var preset = new Preset(1,"日常",device.DeviceId,false,true,[new("rate",Value:48000),new("mute",0,1,1)]);
+Test("原厂安全模式配置可保存，仍拒绝非法类型",()=>ControlPolicy.ValidateFormat(preset with {Settings=[new("safemode",Value:1)]}));
+Test("缓冲调整保留安全模式，切换只改安全位",()=>
+{
+    var d=device with {AsioFlags=0x10004};
+    Check(NativeLayouts.BufferFlags(d)==0x10004,"缓冲修改会清除原模式");
+    Check(NativeLayouts.BufferFlags(d,false)==4&&NativeLayouts.BufferFlags(d,true)==0x10004,"破坏其他模式标志");
+    Reject(()=>NativeLayouts.BufferFlags(device));
+});
+Test("安全模式必须有已读取的单设备 ASIO 能力",()=>
+{
+    var d=device with {AsioFlags=0,DeviceCount=1,BufferRate=48000,BufferSize=256};
+    ControlPolicy.Validate(d,new("safemode",Value:1));
+    Reject(()=>ControlPolicy.Validate(d with {DeviceCount=2},new("safemode",Value:1)));
+    Reject(()=>ControlPolicy.Validate(d with {AsioFlags=null},new("safemode",Value:1)));
+    Reject(()=>ControlPolicy.Validate(d,new("safemode",Value:2)));
+});
+var driverDevice=device with {Driver=new() {OutputFormats=[new(65537,24,2,"PCM"),new(65538,16,2,"PCM")],OutputFormat=new(65537,24,2,"PCM"),FormatSelectionMode=1,Dsd=false,WdmClients=0,AsioClients=0,StreamingMode=1}};
+Test("格式使用设备格式 ID，拒绝索引与未支持的输入写入",()=>
+{
+    ControlPolicy.Validate(driverDevice,new("format",Value:65538));
+    Reject(()=>ControlPolicy.Validate(driverDevice,new("format",Value:1)));
+    Reject(()=>ControlPolicy.Validate(driverDevice,new("format",Direction:1,Value:65538)));
+});
+Test("音频软件占用或 DSD 时拒绝输出格式变更",()=>
+{
+    Reject(()=>ControlPolicy.Validate(driverDevice with {Driver=driverDevice.Driver with {WdmClients=1}},new("format",Value:65538)));
+    Reject(()=>ControlPolicy.Validate(driverDevice with {Driver=driverDevice.Driver with {AsioClients=1}},new("format",Value:65538)));
+    Reject(()=>ControlPolicy.Validate(driverDevice with {Driver=driverDevice.Driver with {Dsd=true}},new("format",Value:65538)));
+    Reject(()=>ControlPolicy.Validate(driverDevice with {Driver=driverDevice.Driver with {FormatSelectionMode=0}},new("format",Value:65538)));
+});
+Test("流模式拒绝任意值、未知能力和占用设备",()=>
+{
+    ControlPolicy.Validate(driverDevice,new("streammode",Value:2));
+    Reject(()=>ControlPolicy.Validate(driverDevice,new("streammode",Value:3)));
+    Reject(()=>ControlPolicy.Validate(device,new("streammode",Value:1)));
+    Reject(()=>ControlPolicy.Validate(driverDevice with {Driver=driverDevice.Driver with {AsioClients=1}},new("streammode",Value:2)));
+});
+Test("格式和时钟结构读取偏移及边界正确",()=>
+{
+    var format=new byte[332];BitConverter.GetBytes(65538u).CopyTo(format,0);BitConverter.GetBytes(16u).CopyTo(format,4);BitConverter.GetBytes(2u).CopyTo(format,8);
+    Check(NativeLayouts.Format(format) is {Id:65538,Bits:16,Channels:2},"格式结构偏移错误");
+    var clock=new byte[340];BitConverter.GetBytes(41u).CopyTo(clock,0);BitConverter.GetBytes(1u).CopyTo(clock,12);BitConverter.GetBytes(44100u).CopyTo(clock,16);
+    Check(NativeLayouts.Clock(clock) is {Id:41,Locked:true,Rate:44100},"时钟字段错误");
+    Reject(()=>NativeLayouts.Format(new byte[332]));Reject(()=>NativeLayouts.Clock(new byte[339]));
+});
+Test("ASIO 的安全位和 DSD 位不混淆",()=>
+{
+    var bytes=new byte[196];BitConverter.GetBytes(1u).CopyTo(bytes,12);BitConverter.GetBytes(0x10000u).CopyTo(bytes,16);
+    var info=NativeLayouts.AsioInfo(bytes);Check(info.Dsd&&info.Flags==0x10000,"ASIO 状态位解释错误");
+});
+Test("预设捕获原厂设置，并跳过被占用的格式和流模式",()=>
+{
+    var d=driverDevice with {DeviceCount=1,BufferRate=48000,BufferSize=256,AsioFlags=0x10000};
+    var p=PresetCapture.From(d,"原厂设置",false);
+    Check(p.Settings.Any(s=>s.Kind=="safemode"&&s.Value==1)&&p.Settings.Any(s=>s.Kind=="format"&&s.Value==65537)&&p.Settings.Any(s=>s.Kind=="streammode"&&s.Value==1),"丢失原厂设置");
+    p=PresetCapture.From(d with {Driver=d.Driver with {WdmClients=1}},"占用",false);
+    Check(!p.Settings.Any(s=>s.Kind is "format" or "streammode"),"不应保存当前不可应用的模式");
+});
 Test("合法预设可通过能力检查",()=>ControlPolicy.ValidatePreset(device,preset));
 Test("不同设备预设拒绝",()=>Reject(()=>ControlPolicy.ValidatePreset(device,preset with {DeviceId="other"})));
 Test("演示预设不得应用真实设备",()=>Reject(()=>ControlPolicy.ValidatePreset(device,preset with {Demo=true})));

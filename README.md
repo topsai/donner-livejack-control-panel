@@ -8,7 +8,7 @@
 
 ## 下载与安装
 
-推荐在 [Releases](https://github.com/topsai/donner-livejack-control-panel/releases/latest) 下载 `DonnerControlPanel-v1.16-Setup-win-x64.exe`，双击安装。安装包自带 .NET 运行时和原厂 USB 音频驱动，无需联网或另外下载驱动。
+推荐在 [Releases](https://github.com/topsai/donner-livejack-control-panel/releases/latest) 下载 `DonnerControlPanel-v1.17-Setup-win-x64.exe`，双击安装。安装包自带 .NET 运行时和原厂 USB 音频驱动，无需联网或另外下载驱动。
 
 - 已有兼容的原厂驱动：自动跳过驱动安装。
 - 缺少兼容驱动：先打开内置的原厂驱动安装向导。允许 Windows 管理员授权并完成向导后，安装程序会检查驱动，再安装中文面板。
@@ -26,6 +26,7 @@
 - 拖动滑块、直接输入百分比或用方向键按 1% 选档；实际音量受硬件步进限制，相邻档位可能对应相同音量。
 - USB 拔插后自动重连，丢弃旧设备状态并重新读取当前设置。
 - 预设保存与应用、诊断日志、最小化至托盘、可关闭的 Windows 登录自启动。
+- 原厂驱动设置：输出 16/24 位、ASIO 安全模式、按需/持续音频流、时钟锁定及 WDM/ASIO 占用状态。修改缓冲会保留安全模式；未支持或未读到的项隐藏。
 - 面板说明：点击照片中的 01–13 编号，查看对应接口、旋钮与开关的中文说明。
 
 默认窗口为 900 × 620。音频设置与通道音量左右排列；其他页面从右上角齿轮菜单进入。
@@ -56,7 +57,7 @@
 .\build-installer.ps1 -DriverInstaller 'C:\drivers\Donner_UsbAudio_v5.0.0_2021-03-29_setup.exe'
 ```
 
-脚本验证原厂签名与 SHA-256，输出 `dist\DonnerControlPanel-v1.16-Setup-win-x64.exe`。源码仓库不保存驱动二进制。安装包内驱动为原厂 5.0.0 版本（SHA-256：`12EF3F0F517B2F00A7EBBA3DBC0CAC978E4A71ECE8599B31FFE853304DD147F0`），保持原文件；安装过程交由原厂向导执行。
+脚本验证原厂签名与 SHA-256，输出 `dist\DonnerControlPanel-v1.17-Setup-win-x64.exe`。源码仓库不保存驱动二进制。安装包内驱动为原厂 5.0.0 版本（SHA-256：`12EF3F0F517B2F00A7EBBA3DBC0CAC978E4A71ECE8599B31FFE853304DD147F0`），保持原文件；安装过程交由原厂向导执行。
 
 安装脚本的简体中文语言文件来自 [Inno Setup 仓库](https://github.com/jrsoftware/issrc/blob/main/Files/Languages/ChineseSimplified.isl)，保留作者署名。
 
@@ -81,6 +82,8 @@ dotnet run --project tests/Donner.Tests -c Release
 | `src/Donner.Core` | 能力检查、音量映射、预设、设备状态与进程通信 |
 | `src/Donner.Host` | 隔离进程调用原厂控制 API，检测设备并读写设置 |
 | `src/Donner.Panel` | WPF 中文界面、托盘、自动启动与面板说明 |
-| `tests/Donner.Tests` | 52 项核心回归检查，无第三方测试框架 |
+| `tests/Donner.Tests` | 61 项核心回归检查，无第三方测试框架 |
 
 源码仓库与便携 ZIP 不包含原厂驱动；统一安装 EXE 包含未经修改的原厂驱动安装程序。品牌名称用于说明兼容设备；此项目非 Donner 官方产品。
+
+原厂功能与软件处理的核对、接口依据及验证范围见 [驱动功能说明](docs/driver-features.md)。

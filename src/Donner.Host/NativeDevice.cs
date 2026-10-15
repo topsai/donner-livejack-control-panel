@@ -31,6 +31,10 @@ public sealed class NativeDevice : IDisposable
     [UnmanagedFunctionPointer(CallingConvention.Winapi)] private delegate uint Rates(uint handle,uint capacity,
         [Out,MarshalAs(UnmanagedType.LPArray,SizeParamIndex=1)] uint[] rates,out uint length);
     [UnmanagedFunctionPointer(CallingConvention.Winapi)] private delegate uint SetBuffer(uint index,uint rate,uint samples,uint flags);
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)] private delegate uint Clients(uint handle,out uint streaming,out uint wdm,out uint asio);
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)] private delegate uint FormatCall(uint handle,uint direction,IntPtr buffer);
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)] private delegate uint FormatList(uint handle,uint direction,uint capacity,IntPtr buffer,out uint length);
+    [UnmanagedFunctionPointer(CallingConvention.Winapi)] private delegate uint TripleWrite(uint handle,uint first,uint second);
     [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] private static extern IntPtr LoadLibraryExW(string path,IntPtr reserved,uint flags);
     private T Api<T>(string name) where T:Delegate => Marshal.GetDelegateForFunctionPointer<T>(NativeLibrary.GetExport(library,"TUSBAUDIO_"+name));
     private static void Check(uint status,string operation)
@@ -107,12 +111,14 @@ public sealed class NativeDevice : IDisposable
         }
         uint? bufferSize=null;uint bufferRate=0;uint[] sizes=[];
         uint? inputLatency=null,outputLatency=null,latencyRate=null;
+        uint? asioFlags=null;bool? dsd=null;
         if(count==1)
         {
             try
             {
                 var bytes=Buffer(196,p=>Api<BufferCall>("GetASIOInstanceInfo")(0,p),"查询 ASIO");
                 var info=NativeLayouts.AsioInfo(bytes);bufferSize=info.Preferred;bufferRate=info.Rate;sizes=info.Sizes;
+                asioFlags=info.Flags;dsd=info.Dsd;
                 diagnostics["输入延迟（samples）"]=info.InputLatency.ToString();diagnostics["输出延迟（samples）"]=info.OutputLatency.ToString();
                 inputLatency=info.InputLatency;outputLatency=info.OutputLatency;latencyRate=info.Rate>0?info.Rate:null;
             }
@@ -120,19 +126,49 @@ public sealed class NativeDevice : IDisposable
         }
         else diagnostics["ASIO 设置限制"]="多个设备时禁用：原厂 API 隐式操作设备 0。";
         var model=DeviceTopology.Model(identity);
+        var driver=ReadDriverState(diagnostics,dsd);
         return snapshot=new() {Connected=true,Status=count>1?"已连接（当前为第一个设备）":"已连接 Donner Livejack",DeviceId=identity,DeviceCount=count,Model=model,Name=model??"Donner Livejack",
             InputLatencySamples=inputLatency,OutputLatencySamples=outputLatency,LatencySampleRate=latencyRate,
-            ApiPath=ApiPath,ApiVersion=version,SampleRate=rate,SampleRates=rates,Channels=channels.ToArray(),BufferSize=bufferSize,BufferRate=bufferRate,BufferSizes=sizes,Diagnostics=diagnostics};
+            ApiPath=ApiPath,ApiVersion=version,SampleRate=rate,SampleRates=rates,Channels=channels.ToArray(),BufferSize=bufferSize,BufferRate=bufferRate,BufferSizes=sizes,AsioFlags=asioFlags,Driver=driver,Diagnostics=diagnostics};
+    }
+    private DriverState ReadDriverState(Dictionary<string,string> diagnostics,bool? dsd)
+    {
+        var state=new DriverState {Dsd=dsd};
+        void Query(string label,Action read)
+        {
+            try {read();}
+            catch(Exception error) when(error is IOException or InvalidDataException or EntryPointNotFoundException)
+            {diagnostics[label]=error.Message;}
+        }
+        Query("时钟状态",()=>state=state with {Clock=NativeLayouts.Clock(Buffer(340,p=>Api<BufferCall>("GetCurrentClockSource")(token,p),"读取时钟"))});
+        Query("输入格式",()=>state=state with {InputFormat=NativeLayouts.Format(Buffer(332,p=>Api<FormatCall>("GetCurrentStreamFormat")(token,1,p),"读取输入格式"))});
+        Query("输出格式",()=>state=state with {OutputFormat=NativeLayouts.Format(Buffer(332,p=>Api<FormatCall>("GetCurrentStreamFormat")(token,0,p),"读取输出格式"))});
+        Query("输出格式能力",()=>
+        {
+            uint length=0;
+            var bytes=Buffer(332*32,p=>Api<FormatList>("GetSupportedStreamFormats")(token,0,32,p,out length),"读取输出格式能力");
+            if(length>32)throw new InvalidDataException("输出格式数量超出上限。");
+            state=state with {OutputFormats=Enumerable.Range(0,(int)length).Select(i=>NativeLayouts.Format(bytes.AsSpan(i*332,332).ToArray())).DistinctBy(f=>f.Id).ToArray()};
+        });
+        Query("格式选择状态",()=>{Check(Api<ReadUInt>("GetStreamFormatSelectionMode")(token,out var mode),"读取格式选择状态");state=state with {FormatSelectionMode=mode};});
+        Query("客户端状态",()=>
+        {
+            Check(Api<Clients>("GetClientInfo")(token,out var streaming,out var wdm,out var asio),"读取客户端状态");
+            if(streaming>1)throw new InvalidDataException("流状态返回值无效。");
+            state=state with {Streaming=streaming==1,WdmClients=wdm,AsioClients=asio};
+        });
+        Query("音频流模式",()=>{Check(Api<ReadUInt>("GetDeviceStreamingMode")(token,out var mode),"读取音频流模式");if(mode is 1 or 2)state=state with {StreamingMode=mode};});
+        return state;
     }
     public HostReply Apply(string id,Setting[] settings)
     {
         if(settings.Length>32) throw new InvalidDataException("单次设置数量过多。");
         var current=Read();foreach(var setting in settings)ControlPolicy.Validate(current,setting);
         var results=new List<OperationResult>();
-        var ordered=settings.OrderBy(s=>s.Kind=="rate"?0:s.Kind=="buffer"?1:2).ToArray();
+        var ordered=settings.OrderBy(s=>s.Kind=="format"?0:s.Kind=="rate"?1:s.Kind=="buffer"?2:3).ToArray();
         foreach(var setting in ordered)
         {
-            var kind=setting.Kind switch {"volume"=>"音量","mute"=>"静音","rate"=>"采样率","buffer"=>"缓冲",_=>setting.Kind};
+            var kind=setting.Kind switch {"volume"=>"音量","mute"=>"静音","rate"=>"采样率","buffer"=>"缓冲","format"=>"输出格式","safemode"=>"ASIO 安全模式","streammode"=>"音频流模式",_=>setting.Kind};
             var operation=setting.Kind is "volume" or "mute"?$"{(setting.Direction==1?"输入":"输出")} {setting.Channel} {kind} → {setting.Value}":$"{kind} → {setting.Value}";
             try
             {
@@ -140,7 +176,10 @@ public sealed class NativeDevice : IDisposable
                 uint status=setting.Kind switch
                 {
                     "rate"=>Api<WriteUInt>("SetSampleRate")(token,(uint)setting.Value),
-                    "buffer"=>Api<SetBuffer>("SetASIOBufferPreferredSize")(0,current.BufferRate,(uint)setting.Value,0),
+                    "buffer"=>Api<SetBuffer>("SetASIOBufferPreferredSize")(0,current.BufferRate,(uint)setting.Value,NativeLayouts.BufferFlags(current)),
+                    "safemode"=>Api<SetBuffer>("SetASIOBufferPreferredSize")(0,current.BufferRate,current.BufferSize!.Value,NativeLayouts.BufferFlags(current,setting.Value==1)),
+                    "format"=>Api<TripleWrite>("SetCurrentStreamFormat")(token,0,(uint)setting.Value),
+                    "streammode"=>Api<TripleWrite>("SetDeviceStreamingMode")(token,(uint)setting.Value,1),
                     "volume"=>Api<WriteChannel>("SetVolume")(token,setting.Direction,setting.Channel,unchecked((ushort)setting.Value)),
                     "mute"=>Api<WriteChannel>("SetMute")(token,setting.Direction,setting.Channel,(ushort)setting.Value),
                     _=>throw new InvalidDataException("未知设置。")
@@ -148,7 +187,9 @@ public sealed class NativeDevice : IDisposable
                 Check(status,operation);current=Read();
                 var channel=current.Channels.FirstOrDefault(c=>c.Direction==setting.Direction&&c.Number==setting.Channel);
                 bool verified=setting.Kind switch {"rate"=>current.SampleRate==setting.Value,"buffer"=>current.BufferSize==setting.Value,
-                    "volume"=>channel?.Volume==setting.Value,"mute"=>channel?.Muted==(setting.Value==1),_=>false};
+                    "volume"=>channel?.Volume==setting.Value,"mute"=>channel?.Muted==(setting.Value==1),
+                    "safemode"=>current.SafeMode==(setting.Value==1),"format"=>current.Driver.OutputFormat?.Id==setting.Value,
+                    "streammode"=>current.Driver.StreamingMode==setting.Value,_=>false};
                 results.Add(new(operation,verified,verified?"写入并回读确认":"已发送，但回读值不一致或暂不可用"));
             }
             catch(Exception e) when(e is IOException or InvalidDataException)

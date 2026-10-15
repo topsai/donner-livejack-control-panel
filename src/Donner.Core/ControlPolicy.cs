@@ -18,6 +18,25 @@ public static class ControlPolicy
                 throw new InvalidDataException("未确认缓冲能力，或当前连接了多个设备。");
             return;
         }
+        if(setting.Kind=="safemode")
+        {
+            if(device.DeviceCount!=1||device.AsioFlags is null||device.BufferRate==0||device.BufferSize is null||setting.Value is not (0 or 1))
+                throw new InvalidDataException("安全模式不可用。");
+            return;
+        }
+        if(setting.Kind=="streammode")
+        {
+            if(device.Driver.StreamingMode is not (1 or 2)||setting.Value is not (1 or 2)||device.Driver.WdmClients!=0||device.Driver.AsioClients!=0)
+                throw new InvalidDataException("音频流模式不可用，或音频软件正在使用设备。");
+            return;
+        }
+        if(setting.Kind=="format")
+        {
+            if(setting.Direction!=0||device.Driver.FormatSelectionMode!=1||device.Driver.Dsd!=false||
+                device.Driver.WdmClients!=0||device.Driver.AsioClients!=0||setting.Value<=0||!device.Driver.OutputFormats.Any(f=>f.Id==setting.Value))
+                throw new InvalidDataException("输出格式不可用，或音频软件正在使用设备。");
+            return;
+        }
         var c = device.Channels.SingleOrDefault(c => c.Direction == setting.Direction && c.Number == setting.Channel)
             ?? throw new InvalidDataException("设备未确认该通道。");
         switch (setting.Kind)
@@ -53,7 +72,7 @@ public static class ControlPolicy
     {
         if (preset.Version != 1 || string.IsNullOrWhiteSpace(preset.DeviceId) || preset.Settings is null ||
             preset.Settings.Length > 32 || preset.Settings.Any(s => s is null ||
-            s.Kind is not ("rate" or "buffer" or "volume" or "mute")))
+            s.Kind is not ("rate" or "buffer" or "volume" or "mute" or "safemode" or "streammode" or "format")))
             throw new InvalidDataException("预设格式不受支持。");
         ValidateName(preset.Name);
         if (preset.Settings.Select(s => $"{s.Kind}:{s.Direction}:{s.Channel}").Distinct().Count() != preset.Settings.Length)

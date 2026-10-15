@@ -37,6 +37,8 @@ public partial class MainWindow : Window
     private System.Drawing.Icon? trayIcon;
     private Forms.ToolStripItem? trayMute;
     private bool busy,rendering,closed;
+    private uint? selectedFormat,selectedStreamMode;
+    private sealed record DriverOption(uint Value,string Label);
     private sealed record RateOption(uint Value,string Label);
     private sealed record ChannelView(Grid Row,TextBlock Label,Slider Slider,TextBox Number,CheckBox Mute)
     {
@@ -48,7 +50,10 @@ public partial class MainWindow : Window
     public MainWindow(string[] args)
     {
         InitializeComponent();
-        Title="Donner 中文控制面板 · v1.16";
+        StreamModeCombo.ItemsSource=new[]{new DriverOption(1,"按需开启"),new DriverOption(2,"持续开启")};
+        OutputFormatCombo.SelectionChanged+=(_,_)=>{if(!rendering&&OutputFormatCombo.SelectedItem is DriverOption option)selectedFormat=option.Value;};
+        StreamModeCombo.SelectionChanged+=(_,_)=>{if(!rendering&&StreamModeCombo.SelectedItem is DriverOption option)selectedStreamMode=option.Value;};
+        Title="Donner 中文控制面板 · v1.17";
         AboutVersion.Text="版本 "+typeof(MainWindow).Assembly.GetName().Version?.ToString(3);
         var smoke=Array.IndexOf(args,"--smoke");
         smokeDirectory=smoke>=0 && smoke+1<args.Length?Path.GetFullPath(args[smoke+1]):null;
@@ -149,12 +154,12 @@ public partial class MainWindow : Window
     }
     private async Task Detect()
     {
-        if(busy)return;pending.Drain();volumeTimer.Stop();selection.Clear();
+        if(busy)return;pending.Drain();volumeTimer.Stop();selection.Clear();selectedFormat=null;selectedStreamMode=null;
         await Run(async()=>{await session.DetectAsync();Record(session.Snapshot.Status);});
     }
     private async Task BackgroundPoll()
     {
-        if(busy||closed||session.Snapshot.Demo||ChannelsPanel.IsMouseCaptureWithin||volumeTimer.IsEnabled||RateCombo.IsDropDownOpen||BufferCombo.IsDropDownOpen)return;
+        if(busy||closed||session.Snapshot.Demo||ChannelsPanel.IsMouseCaptureWithin||volumeTimer.IsEnabled||RateCombo.IsDropDownOpen||BufferCombo.IsDropDownOpen||OutputFormatCombo.IsDropDownOpen||StreamModeCombo.IsDropDownOpen)return;
         await Run(async()=>
         {
             var before=session.Snapshot;
@@ -181,6 +186,12 @@ public partial class MainWindow : Window
         ChannelsPanel.IsEnabled=!busy && d.Connected;
         RateCombo.IsEnabled=RateApply.IsEnabled=!busy && d.Connected && d.SampleRates.Length>0;
         BufferCombo.IsEnabled=BufferApply.IsEnabled=!busy && d.Connected && d.DeviceCount==1 && d.BufferRate>0 && d.BufferSizes.Length>0;
+        SafeModeCheck.Visibility=d.Connected&&d.SafeMode is not null&&d.DeviceCount==1&&d.BufferSize is not null?Visibility.Visible:Visibility.Collapsed;
+        SafeModeCheck.IsEnabled=!busy&&d.Connected&&d.BufferRate>0;
+        OutputFormatSection.Visibility=d.Connected&&d.Driver.OutputFormats.Length>1&&d.Driver.OutputFormat is not null&&d.Driver.FormatSelectionMode==1&&d.Driver.Dsd==false?Visibility.Visible:Visibility.Collapsed;
+        OutputFormatCombo.IsEnabled=OutputFormatApply.IsEnabled=!busy&&d.Connected&&d.Driver.FormatSelectionMode==1&&d.Driver.Dsd==false&&d.Driver.WdmClients==0&&d.Driver.AsioClients==0;
+        StreamModeSection.Visibility=d.Connected&&d.Driver.StreamingMode is 1 or 2?Visibility.Visible:Visibility.Collapsed;
+        StreamModeCombo.IsEnabled=StreamModeApply.IsEnabled=!busy&&d.Connected&&d.Driver.WdmClients==0&&d.Driver.AsioClients==0;
         LinkedCheck.IsEnabled=!busy && d.Connected && new uint[]{1,2}.All(n=>d.Channels.Any(c=>c.Direction==0&&c.Number==n&&c.CanVolume&&c.Volume is not null));
         MuteAllButton.IsEnabled=!busy && d.Connected && d.Channels.Any(c=>c.Direction==0&&c.CanMute&&c.Muted is not null);
         SavePresetButton.IsEnabled=!busy && d.Connected;
@@ -214,16 +225,40 @@ public partial class MainWindow : Window
         if(!BufferCombo.Items.Cast<uint>().SequenceEqual(d.BufferSizes))BufferCombo.ItemsSource=d.BufferSizes;
         BufferCombo.SelectedItem=selection.ResolveBuffer(d);
         LinkedCheck.IsChecked=session.Linked;
+        RenderDriver(d);
         RenderChannels(d);EnableControls(d);UpdateDiagnostics();rendering=false;
         if(reconnectCheckDirectory is not null)
         {
             try
             {
                 Directory.CreateDirectory(reconnectCheckDirectory);
-                File.WriteAllText(Path.Combine(reconnectCheckDirectory,"state.json"),JsonSerializer.Serialize(new {Version="1.16",ProcessId=Environment.ProcessId,Updated=DateTimeOffset.Now,d.Connected,d.Demo,d.Status,d.SampleRate,d.BufferSize,DeviceChanges=deviceChanges,NotificationRegistered=notifications is not null},new JsonSerializerOptions {WriteIndented=true}));
+                File.WriteAllText(Path.Combine(reconnectCheckDirectory,"state.json"),JsonSerializer.Serialize(new {Version="1.17",ProcessId=Environment.ProcessId,Updated=DateTimeOffset.Now,d.Connected,d.Demo,d.Status,d.SampleRate,d.BufferSize,DeviceChanges=deviceChanges,NotificationRegistered=notifications is not null},new JsonSerializerOptions {WriteIndented=true}));
             }
             catch(IOException){}
         }
+    }
+    private void RenderDriver(DeviceSnapshot d)
+    {
+        if(!d.Connected){selectedFormat=null;selectedStreamMode=null;}
+        SafeModeCheck.IsChecked=d.SafeMode;
+        var state=d.Driver;var lines=new List<string>();
+        if(d.Connected)
+        {
+            if(state.InputFormat is {} input)lines.Add($"输入：{input.Bits} 位 / {input.Channels} 通道");
+            if(state.OutputFormat is {} output)lines.Add($"输出：{output.Bits} 位 / {output.Channels} 通道");
+            if(state.Clock is {} clock)lines.Add($"时钟：{(clock.Name.Contains("Internal Clock",StringComparison.OrdinalIgnoreCase)?"内部时钟":clock.Name)} · {(clock.Locked?"已锁定":"未锁定")} · {clock.Rate/1000d:0.###} kHz");
+            if(state.Streaming is {} streaming)lines.Add($"音频流：{(streaming?"运行中":"空闲")}");
+            if(state.WdmClients is {} wdm)lines.Add($"WDM 客户端：{wdm}");
+            if(state.AsioClients is {} asio)lines.Add($"ASIO 客户端：{asio}");
+        }
+        var text=string.Join(Environment.NewLine,lines);if(DriverStateText.Text!=text)DriverStateText.Text=text;
+        DriverStateText.Visibility=lines.Count>0?Visibility.Visible:Visibility.Collapsed;
+        if(!OutputFormatCombo.Items.Cast<DriverOption>().Select(o=>o.Value).SequenceEqual(state.OutputFormats.Select(f=>f.Id)))
+            OutputFormatCombo.ItemsSource=state.OutputFormats.Select(f=>new DriverOption(f.Id,$"{f.Bits} 位 / {f.Channels} 通道")).ToArray();
+        OutputFormatCombo.SelectedItem=OutputFormatCombo.Items.Cast<DriverOption>().FirstOrDefault(o=>o.Value==(selectedFormat??state.OutputFormat?.Id));
+        StreamModeCombo.SelectedItem=StreamModeCombo.Items.Cast<DriverOption>().FirstOrDefault(o=>o.Value==(selectedStreamMode??state.StreamingMode));
+        foreach(var item in PagesMenu.Items.OfType<MenuItem>().Where(i=>i.Tag?.ToString()=="6"))
+            item.Visibility=d.Connected&&(lines.Count>0||d.SafeMode is not null)?Visibility.Visible:Visibility.Collapsed;
     }
     private static void ShowLatency(TextBlock text,string label,uint? samples,uint? rate)
     {
@@ -338,6 +373,12 @@ public partial class MainWindow : Window
     {var selected=RateCombo.SelectedItem as RateOption;if(selected is null)return;await FlushVolumes();selection.Clear();await Apply([new("rate",Value:(int)selected.Value)]);}
     private async void BufferClick(object sender,RoutedEventArgs e)
     {if(BufferCombo.SelectedItem is not uint selected)return;await FlushVolumes();selection.Clear();await Apply([new("buffer",Value:(int)selected)]);}
+    private async void SafeModeClick(object sender,RoutedEventArgs e)
+    {if(rendering||busy)return;var enabled=SafeModeCheck.IsChecked==true;await FlushVolumes();await Apply([new("safemode",Value:enabled?1:0)]);}
+    private async void OutputFormatClick(object sender,RoutedEventArgs e)
+    {if(OutputFormatCombo.SelectedItem is not DriverOption option)return;await FlushVolumes();selectedFormat=null;await Apply([new("format",Value:(int)option.Value)]);}
+    private async void StreamModeClick(object sender,RoutedEventArgs e)
+    {if(StreamModeCombo.SelectedItem is not DriverOption option)return;await FlushVolumes();selectedStreamMode=null;await Apply([new("streammode",Value:(int)option.Value)]);}
     private async void LinkedClick(object sender,RoutedEventArgs e)
     {
         if(busy)return;var enabled=LinkedCheck.IsChecked==true;
@@ -388,13 +429,15 @@ public partial class MainWindow : Window
         if(session is null)return;
         if(PresetsList.SelectedItem is Preset p) PresetPreview.Text=$"{p.Name}\n左右联动：{(p.Linked?"开启":"关闭")}\n\n"+
             string.Join("\n",p.Settings.Select(s=>s.Kind switch {"rate"=>$"采样率：{s.Value/1000d:0.###} kHz","buffer"=>$"缓冲：{s.Value} samples",
-                "volume"=>$"{(s.Direction==1?"输入":"输出")} {s.Channel} 音量控制值：{s.Value}","mute"=>$"{(s.Direction==1?"输入":"输出")} {s.Channel}：{(s.Value==1?"静音":"取消静音")}",_=>s.Kind}));
+                "volume"=>$"{(s.Direction==1?"输入":"输出")} {s.Channel} 音量控制值：{s.Value}","mute"=>$"{(s.Direction==1?"输入":"输出")} {s.Channel}：{(s.Value==1?"静音":"取消静音")}",
+                "safemode"=>$"ASIO 安全模式：{(s.Value==1?"开启":"关闭")}","streammode"=>$"音频流：{(s.Value==2?"持续开启":"按需开启")}",
+                "format"=>$"输出格式：{session.Snapshot.Driver.OutputFormats.FirstOrDefault(f=>f.Id==s.Value)?.Bits.ToString()??s.Value.ToString()} 位",_=>s.Kind}));
         else PresetPreview.Text="从左侧选择预设，检查内容后点击应用。";
         EnableControls();
     }
     private async void ApplyPresetClick(object sender,RoutedEventArgs e)
     {
-        if(PresetsList.SelectedItem is not Preset p)return;await FlushVolumes();selection.Clear();
+        if(PresetsList.SelectedItem is not Preset p)return;await FlushVolumes();selection.Clear();selectedFormat=null;selectedStreamMode=null;
         await Run(async()=>{ControlPolicy.ValidatePreset(session.Snapshot,p);var reply=await session.ApplyAsync(p.Settings);
             if(reply.Success)session.Linked=p.Linked;Record(reply.Message);foreach(var result in reply.Results??[])Record($"{result.Operation}：{result.Message}");});
     }
@@ -430,6 +473,7 @@ public partial class MainWindow : Window
             Directory.CreateDirectory(smokeDirectory!);await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);
             SaveImage("device.png");
             var live=session.Snapshot;
+            Pages.SelectedIndex=6;await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);SaveImage("driver-live.png");Pages.SelectedIndex=0;
             if(Pages.SelectedIndex!=0||Pages.SelectedContent is null)throw new Exception("启动时未显示设备控制页。");
             foreach(var menu in PagesMenu.Items.OfType<MenuItem>())
             {
@@ -448,10 +492,11 @@ public partial class MainWindow : Window
             var deadline=DateTime.UtcNow.AddSeconds(12);
             while(live.Connected&&(busy||!session.Snapshot.Connected)&&DateTime.UtcNow<deadline)await Task.Delay(50);
             if(live.Connected&&!session.Snapshot.Connected)throw new Exception("拔插通知后未自动重新连接。");
-            var partial=live with {Connected=true,SampleRates=[],BufferSizes=[],Channels=[
+            var partial=live with {Connected=true,SampleRates=[],BufferSizes=[],AsioFlags=null,Driver=new(),Channels=[
                 new(1,1,"仅静音",false,true,0,0,0,null,false),new(1,2,"无支持",false,false,0,0,0,null,null),
                 new(0,1,"仅音量",true,false,-32512,0,256,-2048,null)]};
             Render(partial);
+            if(SafeModeCheck.Visibility!=Visibility.Collapsed||OutputFormatSection.Visibility!=Visibility.Collapsed||StreamModeSection.Visibility!=Visibility.Collapsed||DriverStateText.Visibility!=Visibility.Collapsed)throw new Exception("未隐藏不支持的原厂驱动功能。");
             if(ChannelsPanel.Children.Count!=2||RateSection.Visibility!=Visibility.Collapsed||BufferSection.Visibility!=Visibility.Collapsed||LinkedCheck.Visibility!=Visibility.Collapsed||MuteAllButton.Visibility!=Visibility.Collapsed)throw new Exception("未隐藏不支持的功能。");
             var muteOnly=(Grid)ChannelsPanel.Children[0];var volumeOnly=(Grid)ChannelsPanel.Children[1];
             if(muteOnly.Children.OfType<Slider>().Single().Visibility!=Visibility.Collapsed||volumeOnly.Children.OfType<CheckBox>().Single().Visibility!=Visibility.Collapsed)throw new Exception("通道仍显示不支持的控件。");
@@ -464,6 +509,12 @@ public partial class MainWindow : Window
             if(live.Connected&&(!RateApply.IsEnabled||!MuteAllButton.IsEnabled))throw new Exception("自动连接后未恢复可用控件。");
             session.SetDemo(true);Render();
             if(!RateApply.IsEnabled||!BufferApply.IsEnabled)throw new Exception("演示控制未开启。");
+            await Apply([new("safemode",Value:1),new("format",Value:65538),new("streammode",Value:2)]);
+            if(session.Snapshot.SafeMode!=true||session.Snapshot.Driver.OutputFormat?.Bits!=16||session.Snapshot.Driver.StreamingMode!=2)throw new Exception("驱动设置模拟切换失败。");
+            await Apply([new("buffer",Value:512)]);
+            if(session.Snapshot.SafeMode!=true)throw new Exception("缓冲调整清除了安全模式。");
+            Pages.SelectedIndex=6;await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);SaveImage("driver-demo.png");Pages.SelectedIndex=0;
+            await Apply([new("safemode",Value:0),new("format",Value:65537),new("streammode",Value:1)]);
             var inputMute=session.Snapshot.Channels.Where(c=>c.Direction==1).Select(c=>c.Muted).ToArray();
             var volumeBeforeMute=session.Snapshot.Channels.Select(c=>c.Volume).ToArray();
             await MuteAll();
@@ -518,6 +569,13 @@ public partial class MainWindow : Window
             if(presets.ReadAll().Length!=1)throw new Exception("预设保存失败。");
             if(presets.ReadAll()[0].Settings.Single(s=>s.Kind=="volume"&&s.Direction==1&&s.Channel==1).Value!=-2304)throw new Exception("保存预设丢失了待应用音量。");
             Pages.SelectedIndex=1;PresetsList.SelectedIndex=0;await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);
+            OutputFormatCombo.SelectedItem=OutputFormatCombo.Items.Cast<DriverOption>().Single(o=>o.Value==65538);
+            StreamModeCombo.SelectedItem=StreamModeCombo.Items.Cast<DriverOption>().Single(o=>o.Value==2);
+            ApplyPresetClick(ApplyPresetButton,new RoutedEventArgs());
+            while(busy)await Task.Delay(20);
+            if(OutputFormatCombo.SelectedItem is not DriverOption appliedFormat||appliedFormat.Value!=session.Snapshot.Driver.OutputFormat?.Id||
+                StreamModeCombo.SelectedItem is not DriverOption appliedMode||appliedMode.Value!=session.Snapshot.Driver.StreamingMode)
+                throw new Exception("应用预设后仍保留未应用的驱动选择。");
             ApplyPresetButton.BringIntoView();await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);
             var buttonPoint=ApplyPresetButton.TranslatePoint(new Point(0,ApplyPresetButton.ActualHeight),Pages);
             if(buttonPoint.Y>Pages.ActualHeight || buttonPoint.Y<0)throw new Exception("应用预设按钮无法滚动到可见区域。");
@@ -545,7 +603,7 @@ public partial class MainWindow : Window
             Pages.SelectedIndex=5;await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);SaveImage("about.png");
             if(end.Y>PanelGuide.GuideScroll.ActualHeight+1||end.Y<0)throw new Exception($"面板说明末尾不能滚动到可见区域：底部={end.Y},高度={PanelGuide.GuideScroll.ActualHeight},偏移={PanelGuide.GuideScroll.VerticalOffset},最大偏移={PanelGuide.GuideScroll.ScrollableHeight}。");
             Pages.SelectedIndex=0;Render(live);await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);SaveImage("device-small.png");
-            File.WriteAllText(Path.Combine(smokeDirectory!,"smoke-result.json"),JsonSerializer.Serialize(new {Success=true,LiveConnected=live.Connected,live.SampleRate,live.BufferSize,Checks=new[]{"全部静音再次点击取消及部分静音切换","静音按钮文字跟随回读状态","切换输出静音不改变输入或音量","音量输入及方向键按1%调节","相同硬件值回读保留用户百分比","拒绝非法及越界百分比","音量轨道点击定位","拖动停顿及刷新保留鼠标捕获与滑块位置","松开后提交最终音量","开机启动注册、带空格路径引用及关闭","Windows拔插消息使旧连接失效并触发自动重新枚举","原厂音量表","按能力隐藏各控件及占位通道","无设备禁写","真实设备只读检测","未连接状态后台自动枚举并恢复控件","真实与演示后台刷新不重建控件或切换启用状态","刷新保留选项列表","演示静音","中文预设保存","六页渲染"}},new JsonSerializerOptions {WriteIndented=true}));
+            File.WriteAllText(Path.Combine(smokeDirectory!,"smoke-result.json"),JsonSerializer.Serialize(new {Success=true,LiveConnected=live.Connected,live.SampleRate,live.BufferSize,Checks=new[]{"全部静音再次点击取消及部分静音切换","静音按钮文字跟随回读状态","切换输出静音不改变输入或音量","音量输入及方向键按1%调节","相同硬件值回读保留用户百分比","拒绝非法及越界百分比","音量轨道点击定位","拖动停顿及刷新保留鼠标捕获与滑块位置","松开后提交最终音量","开机启动注册、带空格路径引用及关闭","Windows拔插消息使旧连接失效并触发自动重新枚举","原厂音量表","按能力隐藏各控件及占位通道","无设备禁写","真实设备只读检测","未连接状态后台自动枚举并恢复控件","真实与演示后台刷新不重建控件或切换启用状态","刷新保留选项列表","演示静音","中文预设保存","七页渲染"}},new JsonSerializerOptions {WriteIndented=true}));
             System.Windows.Application.Current.Shutdown(0);
         }
         catch(Exception error)
