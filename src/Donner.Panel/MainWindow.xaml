@@ -18,7 +18,10 @@
       <StackPanel x:Name="LatencySection" Margin="0,20,0,0"><TextBlock x:Name="InputLatencyText" Foreground="#425D6B" ToolTip="ASIO 驱动报告的输入延迟"/><TextBlock x:Name="OutputLatencyText" Foreground="#425D6B" Margin="0,10,0,0" ToolTip="ASIO 驱动报告的输出延迟"/></StackPanel>
      </StackPanel></Border>
      <Border Grid.Column="2" Background="#F8FAFB" BorderBrush="#E3E9ED" BorderThickness="1" CornerRadius="8" Padding="14" VerticalAlignment="Top"><StackPanel>
-      <Border x:Name="ChannelHeader"><StackPanel><TextBlock Text="通道音量" FontSize="18" FontWeight="SemiBold"/><WrapPanel Margin="0,14,0,6"><CheckBox x:Name="LinkedCheck" Content="左右输出联动" IsChecked="True" VerticalAlignment="Center" Margin="0,0,16,0" Click="LinkedClick"/><CheckBox x:Name="MeterCheck" Content="实时电平" IsChecked="True" Click="MeterCheckClick" VerticalAlignment="Center" Margin="0,0,12,0"/><Button x:Name="MuteAllButton" Content="输出全部静音" Click="MuteAllClick" Margin="0"/></WrapPanel></StackPanel></Border>
+      <Border x:Name="ChannelHeader"><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition/></Grid.ColumnDefinitions>
+       <TextBlock Text="通道音量" FontSize="18" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,12,0"/>
+       <WrapPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" TextElement.FontSize="12"><CheckBox x:Name="LinkedCheck" Content="左右输出联动" IsChecked="True" VerticalAlignment="Center" Margin="0,0,10,0" Click="LinkedClick"/><CheckBox x:Name="MeterCheck" Content="实时电平" IsChecked="True" Click="MeterCheckClick" VerticalAlignment="Center" Margin="0,0,10,0"/><Button x:Name="MuteAllButton" Content="输出全部静音" Click="MuteAllClick" Margin="0" Padding="10,7"/></WrapPanel>
+      </Grid></Border>
       <UniformGrid x:Name="ChannelsPanel" Rows="1" Margin="0,8,0,0"/>
      </StackPanel></Border>
     </Grid></ScrollViewer></TabItem>
