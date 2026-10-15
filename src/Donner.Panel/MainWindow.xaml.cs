@@ -419,9 +419,12 @@ public partial class MainWindow : Window
     {
         if(busy)return;
         await FlushVolumes();
-        try {
-            var p=PresetCapture.From(session.Snapshot,PresetName.Text,session.Linked);presets.Save(p);LoadPresets();Record("已保存预设："+p.Name);}
-        catch(Exception e) when(e is IOException or InvalidDataException or UnauthorizedAccessException){Record(e.Message);}
+        meterSuspended=true;StopMeters();
+        try {await Run(async()=>
+        {
+            if(!session.Snapshot.Demo)await session.RefreshAsync();
+            var p=PresetCapture.From(session.Snapshot,PresetName.Text,session.Linked);presets.Save(p);LoadPresets();Record("已保存预设："+p.Name);
+        });} finally {meterSuspended=false;}
     }
     private async void SavePresetClick(object sender,RoutedEventArgs e)=>await SavePreset();
     private void DeletePresetClick(object sender,RoutedEventArgs e)
@@ -497,6 +500,12 @@ public partial class MainWindow : Window
                     while(!levels.InputAvailable&&DateTime.UtcNow<retryDeadline){await Task.Delay(100);levels.RetryStopped();}
                     if(!levels.InputAvailable)throw new Exception("同一设备的采集停止后未自动恢复。");
                 }
+                await session.RefreshAsync();Render();PresetName.Text="电平预设检查";await SavePreset();
+                if(levels is not null)throw new Exception("保存预设未暂停电平采集。");
+                var meterPreset=presets.ReadAll().Single(p=>p.Name=="电平预设检查");
+                if(session.Snapshot.Driver.WdmClients==0&&session.Snapshot.Driver.AsioClients==0&&session.Snapshot.Driver.FormatSelectionMode==1&&
+                    (!meterPreset.Settings.Any(s=>s.Kind=="format")||!meterPreset.Settings.Any(s=>s.Kind=="streammode")))throw new Exception("电平采集影响了驱动预设保存。");
+                presets.Delete("电平预设检查");LoadPresets();
                 StopMeters();
             }
             Pages.SelectedIndex=6;await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);SaveImage("driver-live.png");Pages.SelectedIndex=0;
