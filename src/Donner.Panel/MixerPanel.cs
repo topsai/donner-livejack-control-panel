@@ -21,7 +21,9 @@ internal sealed partial class MixerPanel:Border,IDisposable
     private readonly Dictionary<string,(float Value,long Deadline)> awaiting=new(StringComparer.Ordinal);
     private readonly DispatcherTimer timer=new(){Interval=TimeSpan.FromMilliseconds(80)};
     private long nextRead,nextConnection;
-    private bool updating,wasConnected,disposed;
+    private bool updating,wasConnected,disposed,engineRestarting;
+    private string? engineNotice;
+    private long engineNoticeUntil;
     private readonly List<Button> microphoneEqButtons=[];
     private readonly List<System.Windows.Shapes.Ellipse> microphoneEqDots=[];
     private int selectedMicrophone,selectedOutput;
@@ -42,13 +44,13 @@ internal sealed partial class MixerPanel:Border,IDisposable
         Background=new SolidColorBrush(Color.FromRgb(248,250,251));BorderBrush=new SolidColorBrush(Color.FromRgb(227,233,237));
         BorderThickness=new Thickness(1);CornerRadius=new CornerRadius(8);Padding=new Thickness(14);Margin=new Thickness(0);
         var body=new StackPanel();Child=body;var heading=new DockPanel();body.Children.Add(heading);
-        var open=new Button{Content="打开原界面",FontSize=12,Padding=new Thickness(10,6,10,6),Margin=new Thickness(10,0,0,0)};DockPanel.SetDock(open,Dock.Right);heading.Children.Add(open);
+        var open=ToolbarButton("打开原界面");DockPanel.SetDock(open,Dock.Right);heading.Children.Add(open);
         open.Click+=(_,_)=>Attempt(()=>client.Start(true));
-        var background=new Button{Content="后台运行",FontSize=12,Padding=new Thickness(10,6,10,6),Margin=new Thickness(10,0,0,0)};
+        var background=ToolbarButton("后台运行");
         DockPanel.SetDock(background,Dock.Right);heading.Children.Insert(0,background);background.Click+=(_,_)=>Attempt(()=>client.Start());
         if(editNames is not null)
         {
-            var names=new Button{Content="设备名称",FontSize=12,Padding=new Thickness(10,6,10,6),Margin=new Thickness(10,0,0,0)};
+            var names=ToolbarButton("设备名称");
             DockPanel.SetDock(names,Dock.Right);heading.Children.Insert(0,names);names.Click+=(_,_)=>editNames();
         }
         var titleAndRates=new Grid();titleAndRates.ColumnDefinitions.Add(new(){Width=GridLength.Auto});titleAndRates.ColumnDefinitions.Add(new());
@@ -56,8 +58,11 @@ internal sealed partial class MixerPanel:Border,IDisposable
         if(sampleRates is MixerSampleRates rates){Grid.SetColumn(rates.HeaderView,1);titleAndRates.Children.Add(rates.HeaderView);}
         heading.Children.Add(titleAndRates);
         var connection=new StackPanel{Orientation=Orientation.Horizontal,Margin=new Thickness(10,0,0,0),VerticalAlignment=VerticalAlignment.Center};
-        var refresh=new Button{Content="刷新设备",FontSize=12,Padding=new Thickness(10,5,10,5),Margin=new Thickness(0,0,12,0)};connection.Children.Add(refresh);connection.Children.Add(status);
-        status.MaxWidth=330;status.TextTrimming=TextTrimming.CharacterEllipsis;status.SetBinding(ToolTipProperty,new System.Windows.Data.Binding("Text"){Source=status});
+        var refresh=new Button{Content="刷新设备",FontSize=12,Padding=new Thickness(10,5,10,5),Margin=new Thickness(0,0,12,0)};connection.Children.Add(refresh);
+        var restart=ToolbarButton("重启引擎");restart.Tag="RestartMixerEngine";restart.Margin=new Thickness(0,0,12,0);restart.ToolTip="重新打开音频设备，声音会短暂中断。";connection.Children.Add(restart);connection.Children.Add(status);
+        restart.Click+=async(_,_)=>{restart.IsEnabled=false;try{await RestartEngineAsync();}catch(Exception error) when(error is IOException or InvalidDataException){engineNotice=error.Message;engineNoticeUntil=Environment.TickCount64+10000;status.Text=error.Message;}finally{if(!disposed)restart.IsEnabled=true;}};
+        if(sampleRates is MixerSampleRates engineRates)engineRates.RestartAction=RestartEngineAsync;
+        status.MaxWidth=240;status.TextTrimming=TextTrimming.CharacterEllipsis;status.SetBinding(ToolTipProperty,new System.Windows.Data.Binding("Text"){Source=status});
         refresh.Click+=(_,_)=>Attempt(()=>{if(client.Refresh())RefreshDevices();Poll(true);});
         if(sampleRates is not null){body.Children.Add(sampleRates);settings=sampleRates as IDisposable;}
         body.Children.Add(controls);
@@ -73,6 +78,22 @@ internal sealed partial class MixerPanel:Border,IDisposable
         body.Children.Add(new TextBlock{Text="电脑或伴奏软件选择“电脑声音 → 调音台 (VAIO)”或“伴奏 / 第二路声音 → 调音台 (AUX)”；直播软件选择“直播混音 1 (B1)”或“直播混音 2 (B2)”。未更名时对应 Voicemeeter Input / AUX Input、Out B1 / B2。",FontSize=12,Foreground=new SolidColorBrush(Color.FromRgb(91,114,125)),Margin=new Thickness(0,10,0,0)});
         InitializePersistence(eqStorage,enabledPreference);
         timer.Tick+=(_,_)=>Poll();if(automaticPolling)timer.Start();Poll(true);
+    }
+    internal static Button ToolbarButton(string caption)=>new(){Content=caption,Width=82,Height=30,FontSize=11,Padding=new Thickness(6,4,6,4),Margin=new Thickness(8,0,0,0),VerticalAlignment=VerticalAlignment.Center};
+    internal async Task<string> RestartEngineAsync()
+    {
+        if(engineRestarting)return "正在重启音频引擎…";
+        if(!client.Connected)throw new IOException("Banana 未连接，请先连接调音台。");
+        engineRestarting=true;engineNotice="正在重启音频引擎…";engineNoticeUntil=long.MaxValue;status.Text=engineNotice;
+        try
+        {
+            FlushConfiguration();client.Set("Command.Restart",1);await Task.Delay(500);
+            bool connected=false;
+            for(int i=0;i<15&&!disposed;i++){if(client.Refresh()){connected=true;break;}await Task.Delay(200);}
+            engineNotice=connected?"音频引擎已重启":"引擎正在重新连接，请稍后检查。";nextConnection=0;nextRead=0;return engineNotice;
+        }
+        catch(Exception error){engineNotice="重启失败："+error.Message;throw;}
+        finally{engineRestarting=false;engineNoticeUntil=Environment.TickCount64+8000;}
     }
     private void BuildStrip(System.Windows.Controls.Panel parent,bool input,int index)
     {
@@ -226,7 +247,7 @@ internal sealed partial class MixerPanel:Border,IDisposable
         Attempt(()=>
         {
             long now=Environment.TickCount64;
-            if(force||now>=nextConnection){client.Refresh();nextConnection=now+1000;status.Text=client.Status+(sessionNotice is null?"":" · "+sessionNotice);}
+            if(force||now>=nextConnection){client.Refresh();nextConnection=now+1000;status.Text=(now<engineNoticeUntil?engineNotice:client.Status)+(sessionNotice is null?"":" · "+sessionNotice);}
             controls.IsEnabled=client.Connected;
             if(!client.Connected){wasConnected=false;sessionReady=false;nextSessionRestore=0;return;}
             if(!wasConnected){RefreshDevices();wasConnected=true;force=true;}

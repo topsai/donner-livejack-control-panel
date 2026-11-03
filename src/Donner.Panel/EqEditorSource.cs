@@ -22,7 +22,7 @@ internal sealed class OutputEqSource(Func<string,float> read,Action<string,float
     private static MicrophoneEqSettings Copy(MicrophoneEqSettings value)=>value with{Bands=(EqBand[])value.Bands.Clone()};
     public bool IsOutput=>true;
     public string[] Targets=>Enumerable.Range(0,5).Select(MixerPanel.BusName).ToArray();
-    public int SampleRate=>rate();
+    public int SampleRate=>monitor is {Registered:true}?monitor.SampleRate:rate();
     private MicrophoneEqInsert? monitor;
     private string? monitorError;
     private long nextMonitorAttempt;

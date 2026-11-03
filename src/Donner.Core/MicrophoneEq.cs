@@ -22,11 +22,12 @@ public sealed record MicrophoneEqSettings(bool Enabled,double Preamp,EqBand[] Ba
 public readonly record struct EqCoefficients(double B0,double B1,double B2,double A1,double A2)
 {
     public static readonly EqCoefficients Identity=new(1,0,0,0,0);
+    public static double EffectiveFrequency(double frequency,int sampleRate)=>Math.Min(frequency,sampleRate*.45);
     public static EqCoefficients Create(EqBand band,int sampleRate)
     {
         if(sampleRate is <8000 or >384000)throw new InvalidDataException("EQ采样率无效。");
         if(!band.Enabled)return Identity;
-        double w=2*Math.PI*Math.Min(band.Frequency,sampleRate*.45)/sampleRate,c=Math.Cos(w),a=Math.Sin(w)/(2*band.Q),A=Math.Pow(10,band.Gain/40),root=2*Math.Sqrt(A)*a;
+        double w=2*Math.PI*EffectiveFrequency(band.Frequency,sampleRate)/sampleRate,c=Math.Cos(w),a=Math.Sin(w)/(2*band.Q),A=Math.Pow(10,band.Gain/40),root=2*Math.Sqrt(A)*a;
         double b0,b1,b2,a0,a1,a2;
         switch(band.Type)
         {

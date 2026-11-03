@@ -22,6 +22,7 @@ internal sealed class EqEditor:Border,IDisposable
     private readonly CheckBox bandEnabled=new(){Content="启用频段",Foreground=Brushes.White,VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(12,0,12,0)};
     private readonly ComboBox type=new(){Width=130,Foreground=Brushes.Black,ItemsSource=new[]{"Bell · 钟形","低切 · High Pass","高切 · Low Pass","低架 · Low Shelf","高架 · High Shelf","陷波 · Notch","带通 · Band Pass"},Margin=new Thickness(6,0,12,0)};
     private readonly TextBox frequency=Number(74),gain=Number(62),q=Number(62),preamp=Number(62);
+    private readonly TextBlock filterHint=new(){Tag="FilterHint",FontSize=11,Foreground=new SolidColorBrush(Color.FromRgb(167,186,201)),TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,6,0,0)};
     private readonly TextBlock status=new(){FontSize=12,Foreground=new SolidColorBrush(Color.FromRgb(165,181,197)),Margin=new Thickness(0,8,0,0),TextWrapping=TextWrapping.Wrap};
     private readonly WrapPanel bandButtons=new();
     private readonly DispatcherTimer timer=new(){Interval=TimeSpan.FromMilliseconds(80)};
@@ -52,7 +53,7 @@ internal sealed class EqEditor:Border,IDisposable
             int band=i;var button=new Button{Content=$"频段 {i+1}",Tag=i,FontSize=12,Padding=new Thickness(10,6,10,6),Margin=new Thickness(0,0,8,0),Background=new SolidColorBrush(EqGraph.Colors[i]),Foreground=Brushes.Black};bandButtons.Children.Add(button);button.Click+=(_,_)=>SelectBand(band);
         }
         var fields=new WrapPanel{Margin=new Thickness(0,10,0,0)};editor.Children.Add(fields);
-        fields.Children.Add(type);fields.Children.Add(bandEnabled);AddField(fields,"频率",frequency,"Hz");AddField(fields,"增益",gain,"dB");AddField(fields,"Q",q,"");
+        fields.Children.Add(type);fields.Children.Add(bandEnabled);AddField(fields,"频率",frequency,"Hz");AddField(fields,"增益",gain,"dB");AddField(fields,"Q",q,"");editor.Children.Add(filterHint);
         editor.Children.Add(new TextBlock{Text=source.IsOutput?"拖动节点调节频率、增益；滚轮调 Q。黄色为总频响，灰色为所选输出的真实频谱。输出增益范围 ±12 dB，Q 范围 0.1–100。":"拖动节点：左右调频率，上下调增益；滚轮调 Q。黄色为总频响，灰色为所选输入频谱（−90～0 dBFS）。",FontSize=11,Foreground=new SolidColorBrush(Color.FromRgb(146,158,178)),Margin=new Thickness(0,12,0,0),TextWrapping=TextWrapping.Wrap});
         var footer=new StackPanel();Grid.SetRow(footer,3);body.Children.Add(footer);footer.Children.Add(status);
         footer.Children.Add(new TextBlock{Text=source.IsOutput?"处理送往所选输出总线的混合声音。左右联动仅将本次修改同步到两侧。":"只处理所选硬件输入，伴奏保持原样。切换页面后继续处理；退出 Donner 面板后恢复原声。下次启动恢复上次的设置。",FontSize=11,Foreground=new SolidColorBrush(Color.FromRgb(146,158,178)),Margin=new Thickness(0,6,0,0),TextWrapping=TextWrapping.Wrap});
@@ -133,6 +134,20 @@ internal sealed class EqEditor:Border,IDisposable
             var config=Current;readError=null;var band=config.Bands[selected];enabled.IsChecked=config.Enabled;bandEnabled.IsChecked=band.Enabled;type.SelectedIndex=(int)band.Type;
             frequency.Text=band.Frequency.ToString("0.##",CultureInfo.CurrentCulture);gain.Text=band.Gain.ToString("0.0",CultureInfo.CurrentCulture);q.Text=band.Q.ToString("0.##",CultureInfo.CurrentCulture);preamp.Text=config.Preamp.ToString("0.0",CultureInfo.CurrentCulture);
             gain.IsEnabled=band.Type is EqFilter.Bell or EqFilter.LowShelf or EqFilter.HighShelf;
+            filterHint.Text=band.Type switch
+            {
+                EqFilter.HighPass=>"低切 / 高通：削减设定频率左侧的低频；12 dB/oct，Q 控制共振。",
+                EqFilter.LowPass=>"高切 / 低通：削减设定频率右侧的高频；12 dB/oct，Q 控制共振。",
+                EqFilter.LowShelf=>"低架：整体提升或衰减低频；频率指定过渡区的中点。",
+                EqFilter.HighShelf=>"高架：整体提升或衰减高频；频率指定过渡区的中点。",
+                EqFilter.Notch=>"陷波：削减中心频率附近的声音；Q 越大，范围越窄。节点高度为操作位置。",
+                EqFilter.BandPass=>"带通：保留中心频率附近的声音；Q 越大，范围越窄。",
+                _=>"钟形：频率决定中心位置，增益决定提升/衰减，Q 决定宽窄。"
+            };
+            double effective=EqCoefficients.EffectiveFrequency(band.Frequency,source.SampleRate);
+            if(effective<band.Frequency-.1)filterHint.Text+=$" 当前采样率下模型的计算频率为 {effective:0.##} Hz。";
+            if(source.IsOutput)filterHint.Text+=" 曲线为模型示意，实际声音由 Banana 原生 EQ 处理。";
+            else if(band.Type is EqFilter.HighPass or EqFilter.LowPass)filterHint.Text+=" Q≈0.707 时截止点约 −3 dB；0 dB 节点为操作手柄。";
             Graph.Settings=config;Graph.Selected=selected;Graph.SampleRate=source.SampleRate;Graph.InvalidateVisual();
             for(int i=0;i<(source.IsOutput?6:10);i++)((Button)bandButtons.Children[i]).Opacity=i==selected?1:.55;
         }

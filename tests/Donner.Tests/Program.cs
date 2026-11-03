@@ -380,6 +380,18 @@ Test("完整预设文件导出导入保留所有参数、十段EQ和应用设置
     Reject(()=>ControlPolicy.ValidateFormat(source with{Settings=[new("mute",0,1,2)]}));
     source.Mixer.Parameters["Command.Restart"]=1;Reject(()=>PresetStore.ExportFile(path,source));
 });
+Test("低切高切、搁架和带通的频率位置符合双二阶公式",()=>
+{
+    foreach(int sr in new[]{44100,48000,96000})foreach(double f in new[]{80d,1000d,5000d})
+    {
+        var hp=EqCoefficients.Create(new(EqFilter.HighPass,f,0,1/Math.Sqrt(2)),sr);var lp=EqCoefficients.Create(new(EqFilter.LowPass,f,0,1/Math.Sqrt(2)),sr);
+        Check(Math.Abs(hp.Decibels(f,sr)+3.0103)<.001&&Math.Abs(lp.Decibels(f,sr)+3.0103)<.001,"低切/高切设定频率不是−3dB截止点");
+        Check(hp.Decibels(f/4,sr)<-23&&lp.Decibels(Math.Min(f*4,sr*.45),sr)<-12,"低切/高切方向错误");
+        foreach(var kind in new[]{EqFilter.LowShelf,EqFilter.HighShelf}){var shelf=EqCoefficients.Create(new(kind,f,8,.70710678),sr);Check(Math.Abs(shelf.Decibels(f,sr)-4)<.001,"搁架频率不是半增益过渡中点");}
+        var bp=EqCoefficients.Create(new(EqFilter.BandPass,f,0,3),sr);Check(Math.Abs(bp.Decibels(f,sr))<.001,"带通中心位置错误");
+    }
+    Check(EqCoefficients.EffectiveFrequency(20000,44100)==19845,"显示用有效频率与原有音频计算上限不一致");
+});
 Console.WriteLine($"热插拔结果：{passed} 通过，{failures} 失败");
 return failures==0?0:1;
 

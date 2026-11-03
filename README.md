@@ -69,21 +69,33 @@ Banana 接管 Livejack 输出时，主页从实际对应的 A1/A2/A3 总线读�
 
 ![页面内输出 EQ 编辑器](docs/images/output-eq-editor.png)
 
-### v1.38 调音台截图
+### v1.39 调音台截图
 
 输入混音：
 
-![v1.38 调音台输入混音](docs/images/mixer-inputs.png)
+![v1.39 调音台输入混音](docs/images/mixer-inputs.png)
 
 输出与 EQ：
 
-![v1.38 调音台输出与 EQ](docs/images/mixer-eq.png)
+![v1.39 调音台输出与 EQ](docs/images/mixer-eq.png)
+
+### 调音台快捷操作与滤波器说明（v1.39）
+
+“刷新设备”旁新增“重启引擎”，用于重新打开 Banana 音频设备，声音会短暂中断；重复点击不会重复发送命令，重启不清空已保存配置。顶部“采样率设置、打开原界面、后台运行、设备名称”统一为 82 × 30。
+
+低切（高通）削减设定频率左侧低频，高切（低通）削减右侧高频。输入 EQ 的低切/高切是二阶 12 dB/oct 滤波器，Q≈0.707 时设定频率处约 −3 dB。节点是频率/增益操作手柄，不必落在实际响应曲线上；搁架频率为过渡区的半增益位置。现有声音参数和预设不会因本次界面更新自动改变。高频受原有采样率保护上限限制时，节点按有效计算频率定位并显示说明。输出曲线为同类滤波器模型示意，实际处理由 Banana 原生 EQ 完成，不能保证与其他专业插件逐点一致。
+
+![配置预设页面](docs/images/presets.png)
+
+80 项核心测试和界面冒烟检查通过；[v1.39 验证记录](docs/verification/v1.39-ui-and-filter-checks.json)。
+
+参数含义参照 [FabFilter 的滤波器说明](https://www.fabfilter.com/help/pro-q/using/bandcontrols)，输入计算核对 [W3C Audio EQ Cookbook](https://www.w3.org/TR/audio-eq-cookbook/)。不同软件的 Q 标度可能不同，不应仅按相同数字判断曲线一致。
 
 ## 配置保存与完整预设（v1.38）
 
 关闭窗口前提交当前编辑和待写入音量，持续保存成功的修改。安装升级沿用 `%LOCALAPPDATA%\DonnerControlPanel`，安装目录和版本号不参与配置路径；升级/卸载面板均不清理个人配置。配置采用原子替换并保留 `.bak`，损坏主文件可读取有效备份。
 
-“配置预设”支持保存、导出 JSON、导入后预览并应用；同名导入另存，不覆盖旧预设。新版 v2 包含以下本面板支持的设置：
+预设页采用列表、保存栏与分组预览布局，通道音量显示百分比。“配置预设”支持保存、导出 JSON、导入后预览并应用；同名导入另存，不覆盖旧预设。新版 v2 包含以下本面板支持的设置：
 
 - Donner：采样率、ASIO 缓冲/安全模式、输出格式/流模式、通道音量/静音、左右联动及精确百分比。
 - 调音台：启用开关、设备类型与稳定 ID、全部条带/总线推子、静音、单声道、路由、压缩、噪声门、虚拟输入音调、原生输出 EQ 各声道各频段参数和启用开关。
@@ -95,7 +107,7 @@ Banana 接管 Livejack 输出时，主页从实际对应的 A1/A2/A3 总线读�
 
 ## 下载与安装
 
-推荐在 [Releases](https://github.com/topsai/donner-livejack-control-panel/releases/latest) 下载 `DonnerControlPanel-v1.38-Setup-win-x64.exe`，双击安装。安装包自带 .NET 运行时和原厂 USB 音频驱动，无需联网或另外下载驱动。
+推荐在 [Releases](https://github.com/topsai/donner-livejack-control-panel/releases/latest) 下载 `DonnerControlPanel-v1.39-Setup-win-x64.exe`，双击安装。安装包自带 .NET 运行时和原厂 USB 音频驱动，无需联网或另外下载驱动。
 
 - 已有兼容的原厂驱动：自动跳过驱动安装。
 - 缺少兼容驱动：先打开内置的原厂驱动安装向导。允许 Windows 管理员授权并完成向导后，安装程序会检查驱动，再安装中文面板。
@@ -149,7 +161,7 @@ v1.38 起，启动和重连会恢复上次保存的设置，只提交与实际�
 .\build-installer.ps1 -DriverInstaller 'C:\drivers\Donner_UsbAudio_v5.0.0_2021-03-29_setup.exe'
 ```
 
-脚本验证原厂签名与 SHA-256，输出 `dist\DonnerControlPanel-v1.38-Setup-win-x64.exe`。源码仓库不保存驱动二进制。安装包内驱动为原厂 5.0.0 版本（SHA-256：`12EF3F0F517B2F00A7EBBA3DBC0CAC978E4A71ECE8599B31FFE853304DD147F0`），保持原文件；安装过程交由原厂向导执行。
+脚本验证原厂签名与 SHA-256，输出 `dist\DonnerControlPanel-v1.39-Setup-win-x64.exe`。源码仓库不保存驱动二进制。安装包内驱动为原厂 5.0.0 版本（SHA-256：`12EF3F0F517B2F00A7EBBA3DBC0CAC978E4A71ECE8599B31FFE853304DD147F0`），保持原文件；安装过程交由原厂向导执行。
 
 安装脚本的简体中文语言文件来自 [Inno Setup 仓库](https://github.com/jrsoftware/issrc/blob/main/Files/Languages/ChineseSimplified.isl)，保留作者署名。
 
@@ -174,7 +186,7 @@ dotnet run --project tests/Donner.Tests -c Release
 | `src/Donner.Core` | 能力检查、音量映射、预设、设备状态与进程通信 |
 | `src/Donner.Host` | 隔离进程调用原厂控制 API，检测设备并读写设置 |
 | `src/Donner.Panel` | WPF 中文界面、托盘、自动启动与面板说明 |
-| `tests/Donner.Tests` | 79 项核心回归检查，无第三方测试框架 |
+| `tests/Donner.Tests` | 80 项核心回归检查，无第三方测试框架 |
 
 源码仓库与便携 ZIP 不包含原厂驱动；统一安装 EXE 包含未经修改的原厂驱动安装程序。品牌名称用于说明兼容设备；此项目非 Donner 官方产品。
 

@@ -25,7 +25,29 @@
       <UniformGrid x:Name="ChannelsPanel" Rows="1" Margin="0,8,0,0"/>
      </StackPanel></Border>
     </Grid></ScrollViewer></TabItem>
-    <TabItem Header="配置预设"><Grid Margin="24"><Grid.ColumnDefinitions><ColumnDefinition Width="290"/><ColumnDefinition Width="24"/><ColumnDefinition/></Grid.ColumnDefinitions><ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto"><StackPanel><TextBlock Text="我的预设" FontSize="18" FontWeight="SemiBold"/><ListBox x:Name="PresetsList" DisplayMemberPath="Name" Height="260" Margin="0,16,0,12" SelectionChanged="PresetSelected"/><Button Content="删除所选预设" Click="DeletePresetClick" HorizontalAlignment="Left"/><Button Content="导出所选预设" Click="ExportPresetClick" HorizontalAlignment="Left" Margin="0,10,0,0"/><Button Content="导入预设" Click="ImportPresetClick" HorizontalAlignment="Left" Margin="0,10,0,0"/><Button Content="打开预设目录" Click="OpenPresetsClick" HorizontalAlignment="Left" Margin="0,10,0,0"/><TextBlock Text="预设保存在当前用户目录。损坏文件会报告错误，可在目录中处理。" Foreground="#657887" Margin="0,18,0,0"/></StackPanel></ScrollViewer><ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto"><StackPanel><TextBlock Text="保存当前全部设置" FontSize="18" FontWeight="SemiBold"/><TextBox x:Name="PresetName" Margin="0,16,0,12" MaxLength="60" Text="日常使用"/><Button x:Name="SavePresetButton" Content="保存预设" Style="{StaticResource Primary}" Click="SavePresetClick" HorizontalAlignment="Left"/><TextBlock Text="应用预设" FontSize="18" FontWeight="SemiBold" Margin="0,26,0,12"/><TextBlock x:Name="PresetPreview" Text="从左侧选择预设，检查内容后点击应用。" Foreground="#657887"/><Button x:Name="ApplyPresetButton" Content="应用所选预设" Click="ApplyPresetClick" Style="{StaticResource Primary}" HorizontalAlignment="Left" Margin="0,18,0,0"/></StackPanel></ScrollViewer></Grid></TabItem>
+    <TabItem Header="配置预设"><Grid Margin="16">
+     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+     <StackPanel Margin="0,0,0,14"><TextBlock Text="配置预设" FontSize="20" FontWeight="SemiBold"/><TextBlock Text="保存当前声音设置，或选择预设预览后应用。" Foreground="#657887" FontSize="12" Margin="0,5,0,0"/></StackPanel>
+     <Grid Grid.Row="1"><Grid.ColumnDefinitions><ColumnDefinition Width="225"/><ColumnDefinition Width="14"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+      <Border Background="#F8FAFB" BorderBrush="#E3E9ED" BorderThickness="1" CornerRadius="8" Padding="14"><Grid>
+       <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+       <TextBlock Text="我的预设" FontSize="15" FontWeight="SemiBold"/>
+       <ListBox x:Name="PresetsList" Grid.Row="1" DisplayMemberPath="Name" Margin="0,12,0,12" SelectionChanged="PresetSelected" BorderBrush="#DCE5E9" Padding="4" ScrollViewer.HorizontalScrollBarVisibility="Disabled"/>
+       <UniformGrid Grid.Row="2" Columns="2" Rows="2"><Button Content="导入预设" Click="ImportPresetClick" FontSize="12" Padding="6,8" Margin="0,0,6,6"/><Button Content="导出所选" Click="ExportPresetClick" FontSize="12" Padding="6,8" Margin="0,0,0,6"/><Button Content="删除所选" Click="DeletePresetClick" FontSize="12" Padding="6,8" Margin="0,0,6,0"/><Button Content="打开目录" Click="OpenPresetsClick" FontSize="12" Padding="6,8" Margin="0"/></UniformGrid>
+      </Grid></Border>
+      <Grid Grid.Column="2"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="14"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+       <Border Background="#F8FAFB" BorderBrush="#E3E9ED" BorderThickness="1" CornerRadius="8" Padding="14"><StackPanel>
+        <TextBlock Text="保存当前设置" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,10"/>
+        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions><TextBox x:Name="PresetName" MaxLength="60" Text="日常使用" Margin="0,0,10,0" VerticalContentAlignment="Center" MinWidth="100"/><Button x:Name="SavePresetButton" Grid.Column="1" Content="保存预设" Style="{StaticResource Primary}" Click="SavePresetClick" Margin="0" FontSize="12" Padding="14,9"/></Grid>
+       </StackPanel></Border>
+       <Border Grid.Row="2" Background="White" BorderBrush="#E3E9ED" BorderThickness="1" CornerRadius="8" Padding="14"><Grid>
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+        <DockPanel Margin="0,0,0,12"><Button x:Name="ApplyPresetButton" DockPanel.Dock="Right" Content="应用所选预设" Click="ApplyPresetClick" Style="{StaticResource Primary}" Margin="8,0,0,0" FontSize="12" Padding="12,8"/><TextBlock x:Name="PresetSelectionTitle" Text="预设内容" FontSize="15" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" TextWrapping="NoWrap"/></DockPanel>
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><TextBlock x:Name="PresetPreview" Text="从左侧选择预设，查看包含的声音设置。" Foreground="#425D6B" FontSize="12" LineHeight="22" TextWrapping="Wrap"/></ScrollViewer>
+       </Grid></Border>
+      </Grid>
+     </Grid>
+    </Grid></TabItem>
     <TabItem Header="设备诊断"><Grid Margin="24"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions><StackPanel Orientation="Horizontal" Margin="0,0,0,16"><Button Content="复制诊断摘要" Click="CopyClick"/><Button Content="导出日志" Click="ExportClick"/><Button Content="打开日志目录" Click="OpenLogsClick"/></StackPanel><TextBox x:Name="DiagnosticsText" Grid.Row="1" IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" FontFamily="Consolas, Microsoft YaHei UI" Background="#F8FAFB"/></Grid></TabItem>
     <TabItem Header="应用设置"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="24,20"><TextBlock Text="启动设置" FontSize="18" FontWeight="SemiBold"/><CheckBox x:Name="StartupCheck" Content="随 Windows 启动" Margin="0,18,0,10" Click="StartupClick"/><TextBlock Text="登录 Windows 后在托盘运行，并自动连接声卡。双击托盘图标可打开控制面板。" Foreground="#657887"/>
      <TextBlock Text="调音台" FontSize="18" FontWeight="SemiBold" Margin="0,28,0,0"/>

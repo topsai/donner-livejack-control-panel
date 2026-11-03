@@ -53,7 +53,7 @@ public partial class MainWindow : Window
         StreamModeCombo.ItemsSource=new[]{new DriverOption(1,"按需开启"),new DriverOption(2,"持续开启")};
         OutputFormatCombo.SelectionChanged+=(_,_)=>{if(!rendering&&OutputFormatCombo.SelectedItem is DriverOption option)selectedFormat=option.Value;};
         StreamModeCombo.SelectionChanged+=(_,_)=>{if(!rendering&&StreamModeCombo.SelectedItem is DriverOption option)selectedStreamMode=option.Value;};
-        Title="Donner 中文控制面板 · v1.38 · topsai (范斯特洛夫斯基)";
+        Title="Donner 中文控制面板 · v1.39 · topsai (范斯特洛夫斯基)";
         AboutVersion.Text="版本 "+typeof(MainWindow).Assembly.GetName().Version?.ToString(3);
         var smoke=Array.IndexOf(args,"--smoke");
         smokeDirectory=smoke>=0 && smoke+1<args.Length?Path.GetFullPath(args[smoke+1]):null;
@@ -249,7 +249,7 @@ public partial class MainWindow : Window
             try
             {
                 Directory.CreateDirectory(reconnectCheckDirectory);
-                File.WriteAllText(Path.Combine(reconnectCheckDirectory,"state.json"),JsonSerializer.Serialize(new {Version="1.38",ProcessId=Environment.ProcessId,Updated=DateTimeOffset.Now,d.Connected,d.Demo,d.Status,d.SampleRate,d.BufferSize,DeviceChanges=deviceChanges,NotificationRegistered=notifications is not null},new JsonSerializerOptions {WriteIndented=true}));
+                File.WriteAllText(Path.Combine(reconnectCheckDirectory,"state.json"),JsonSerializer.Serialize(new {Version="1.39",ProcessId=Environment.ProcessId,Updated=DateTimeOffset.Now,d.Connected,d.Demo,d.Status,d.SampleRate,d.BufferSize,DeviceChanges=deviceChanges,NotificationRegistered=notifications is not null},new JsonSerializerOptions {WriteIndented=true}));
             }
             catch(IOException){}
         }
@@ -443,7 +443,7 @@ public partial class MainWindow : Window
         {
             await cleanup;
             if(!session.Snapshot.Demo)await session.RefreshAsync();
-            var p=PresetCapture.From(session.Snapshot,PresetName.Text,session.Linked);if(!p.Demo)p=p with{Version=2,Settings=ReadableHardwareSettings(p.Settings),Mixer=await CapturePresetMixer(),Application=await CaptureApplicationPreset()};presets.Save(p);LoadPresets();Record("已保存预设："+p.Name);
+            var p=PresetCapture.From(session.Snapshot,PresetName.Text,session.Linked);if(!p.Demo)p=p with{Version=2,Settings=ReadableHardwareSettings(p.Settings),Mixer=await CapturePresetMixer(),Application=await CaptureApplicationPreset()};presets.Save(p);LoadPresets();PresetsList.SelectedItem=PresetsList.Items.Cast<Preset>().FirstOrDefault(x=>x.Name==p.Name);Record("已保存预设："+p.Name);
         });} finally {meterSuspended=false;}
     }
     private async void SavePresetClick(object sender,RoutedEventArgs e)=>await SavePreset();
@@ -456,13 +456,12 @@ public partial class MainWindow : Window
     private void PresetSelected(object sender,SelectionChangedEventArgs e)
     {
         if(session is null)return;
-        if(PresetsList.SelectedItem is Preset p) PresetPreview.Text=$"{p.Name}\n左右联动：{(p.Linked?"开启":"关闭")}\n\n"+
-            string.Join("\n",p.Settings.Select(s=>s.Kind switch {"rate"=>$"采样率：{s.Value/1000d:0.###} kHz","buffer"=>$"缓冲：{s.Value} samples",
-                "volume"=>$"{(s.Direction==1?"输入":"输出")} {s.Channel} 音量控制值：{s.Value}","mute"=>$"{(s.Direction==1?"输入":"输出")} {s.Channel}：{(s.Value==1?"静音":"取消静音")}",
-                "safemode"=>$"ASIO 安全模式：{(s.Value==1?"开启":"关闭")}","streammode"=>$"音频流：{(s.Value==2?"持续开启":"按需开启")}",
-                "format"=>$"输出格式：{session.Snapshot.Driver.OutputFormats.FirstOrDefault(f=>f.Id==s.Value)?.Bits.ToString()??s.Value.ToString()} 位",_=>s.Kind}));
-        else PresetPreview.Text="从左侧选择预设，检查内容后点击应用。";
-        if(PresetsList.SelectedItem is Preset {Mixer:{} mixer})PresetPreview.Text+=$"\n\n调音台：{(mixer.Enabled?"启用":"关闭")} · {mixer.Devices.Length} 个设备绑定 · {mixer.Parameters.Count} 项参数\n输入 EQ："+string.Join("、",mixer.InputEq.Select((x,i)=>$"输入{i+1} {(x.Enabled?"启用":"关闭")}"));
+        if(PresetsList.SelectedItem is Preset p)
+        {
+            PresetSelectionTitle.Text=p.Name;PresetSelectionTitle.ToolTip=p.Name;PresetName.Text=p.Name;
+            PresetPreview.Text=PresetDescription.Format(p,session.Snapshot.Driver.OutputFormats);
+        }
+        else{PresetSelectionTitle.Text="预设内容";PresetPreview.Text="从左侧选择预设，查看包含的声音设置。";}
         EnableControls();
     }
     private async void ApplyPresetClick(object sender,RoutedEventArgs e)

@@ -93,6 +93,10 @@ public partial class MainWindow
         var scroll=Visuals<ScrollViewer>(Pages).First();scroll.ScrollToTop();
         await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);panel.Poll(true);
         if(fake.Writes.Count!=0)throw new Exception("首次读取擅自更改了调音台配置。");
+        var restartButton=Visuals<Button>(panel).Single(x=>x.Tag?.ToString()=="RestartMixerEngine");
+        fake.Writes.Clear();var restartTask=panel.RestartEngineAsync();var duplicateRestart=panel.RestartEngineAsync();await Task.WhenAll(restartTask,duplicateRestart);
+        if(fake.Writes.Count!=1||fake.Writes[0]!=("Command.Restart",1f))throw new Exception("重启引擎没有发送单次命令或改动了配置。");
+        fake.Writes.Clear();
         panel.Queue("Strip[5].Gain",0);panel.Queue("Strip[0].Gain",float.NaN);
         if(fake.Writes.Count!=0||panel.PendingCount!=0)throw new Exception("无效参数进入调音台写入队列。");
         var fader=Visuals<Slider>(panel).First();fader.Value=-9.5;panel.Poll(true);

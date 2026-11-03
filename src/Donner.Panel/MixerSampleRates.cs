@@ -12,7 +12,8 @@ internal sealed class MixerSampleRates:Border,IDisposable
     private readonly IMixerClient client;
     private readonly Func<AudioEndpointFormats.Endpoint[]> readWindows;
     private readonly bool automatic;
-    private readonly Button expand=new(){Content="采样率设置",FontSize=11,Padding=new Thickness(7,4,7,4),Margin=new Thickness(8,0,0,0),VerticalAlignment=VerticalAlignment.Center};
+    private readonly Button expand=MixerPanel.ToolbarButton("采样率设置");
+    internal Func<Task<string>>? RestartAction;
     internal FrameworkElement HeaderView {get;}
     internal event Action? ConfigurationChanged;
     private readonly Dictionary<string,WindowsRateBinding> desiredFormats=[];
@@ -126,6 +127,7 @@ internal sealed class MixerSampleRates:Border,IDisposable
     }
     private async Task<string> RestartBananaAsync()
     {
+        if(RestartAction is not null)return await RestartAction();
         if(!client.Connected)throw new IOException("Banana 未连接。");
         client.Set("Command.Restart",1);await Task.Delay(500);
         if(disposed)return "重启检查已取消。";

@@ -1,0 +1,17 @@
+{
+  "Version": "1.39",
+  "CoreTestsPassed": 80,
+  "CoreTestsFailed": 0,
+  "EngineRestartSingleCommand": true,
+  "RepeatedRestartGuard": true,
+  "LiveMixerScreenshotWriteAttempts": 0,
+  "PresetLayoutVerifiedAt900x620": true,
+  "ToolbarButtons": "82x30",
+  "FilterCutoffTests": "HPF/LPF at 80,1000,5000 Hz, sample rates 44100/48000/96000, Q=1/sqrt(2), -3.0103 dB",
+  "ShelfMidpointTests": true,
+  "BandpassCenterTests": true,
+  "ExistingEqParametersUnchanged": true,
+  "NativeOutputCurveIsIllustrative": true,
+  "InstalledConfigurationPreserved": true,
+  "LiveRestartButtonChecked": true
+}

@@ -24,6 +24,7 @@ internal sealed class EqGraph:FrameworkElement
     internal double XFrequency(double x)=>20*Math.Pow(1000,Math.Clamp((x-Plot.Left)/Plot.Width,0,1));
     private double GainY(double db)=>Plot.Top+(24-Math.Clamp(db,-24,24))/48*Plot.Height;
     private double YGain(double y)=>Math.Clamp(24-(y-Plot.Top)/Plot.Height*48,-MaximumGain,MaximumGain);
+    internal double BandFrequency(EqBand band)=>EqCoefficients.EffectiveFrequency(band.Frequency,SampleRate);
     private static double NodeGain(EqBand b)=>b.Type==EqFilter.Notch?-18:b.Type is EqFilter.HighPass or EqFilter.LowPass or EqFilter.BandPass?0:b.Gain;
     internal EqGraph(){ClipToBounds=true;Focusable=true;Cursor=Cursors.Cross;MinHeight=210;}
     private void Label(DrawingContext dc,string text,Point at,Brush? brush=null,double size=11)
@@ -63,7 +64,7 @@ internal sealed class EqGraph:FrameworkElement
         dc.Pop();
         for(int i=0;i<Settings.Bands.Length;i++)
         {
-            var band=Settings.Bands[i];var point=new Point(FrequencyX(band.Frequency),GainY(NodeGain(band)));
+            var band=Settings.Bands[i];var point=new Point(FrequencyX(BandFrequency(band)),GainY(NodeGain(band)));
             dc.DrawEllipse(band.Enabled?new SolidColorBrush(Colors[i]):new SolidColorBrush(Color.FromRgb(80,83,94)),new Pen(i==Selected?Brushes.White:Brushes.Transparent,i==Selected?2:0),point,i==Selected?7:5,i==Selected?7:5);
         }
     }
@@ -76,7 +77,7 @@ internal sealed class EqGraph:FrameworkElement
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
         base.OnMouseLeftButtonDown(e);Focus();var p=e.GetPosition(this);double closest=20;int found=-1;
-        for(int i=0;i<Settings.Bands.Length;i++){var b=Settings.Bands[i];double distance=(p-new Point(FrequencyX(b.Frequency),GainY(NodeGain(b)))).Length;if(distance<closest){closest=distance;found=i;}}
+        for(int i=0;i<Settings.Bands.Length;i++){var b=Settings.Bands[i];double distance=(p-new Point(FrequencyX(BandFrequency(b)),GainY(NodeGain(b)))).Length;if(distance<closest){closest=distance;found=i;}}
         if(found<0)return;Selected=found;SelectionChanged?.Invoke(found);dragging=CaptureMouse();InvalidateVisual();e.Handled=true;
     }
     protected override void OnMouseMove(MouseEventArgs e)
