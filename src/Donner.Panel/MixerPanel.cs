@@ -35,8 +35,10 @@ internal sealed class MixerPanel:Border,IDisposable
         this.client=client;Background=new SolidColorBrush(Color.FromRgb(248,250,251));BorderBrush=new SolidColorBrush(Color.FromRgb(227,233,237));
         BorderThickness=new Thickness(1);CornerRadius=new CornerRadius(8);Padding=new Thickness(14);Margin=new Thickness(0);
         var body=new StackPanel();Child=body;var heading=new DockPanel();body.Children.Add(heading);
-        var open=new Button{Content="打开 Banana",FontSize=12,Padding=new Thickness(10,6,10,6),Margin=new Thickness(10,0,0,0)};DockPanel.SetDock(open,Dock.Right);heading.Children.Add(open);
-        open.Click+=(_,_)=>Attempt(()=>client.Start());
+        var open=new Button{Content="打开原界面",FontSize=12,Padding=new Thickness(10,6,10,6),Margin=new Thickness(10,0,0,0)};DockPanel.SetDock(open,Dock.Right);heading.Children.Add(open);
+        open.Click+=(_,_)=>Attempt(()=>client.Start(true));
+        var background=new Button{Content="后台运行",FontSize=12,Padding=new Thickness(10,6,10,6),Margin=new Thickness(10,0,0,0)};
+        DockPanel.SetDock(background,Dock.Right);heading.Children.Insert(0,background);background.Click+=(_,_)=>Attempt(()=>client.Start());
         heading.Children.Add(new TextBlock{Text="调音台",FontSize=18,FontWeight=FontWeights.SemiBold,VerticalAlignment=VerticalAlignment.Center});
         var connection=new DockPanel{Margin=new Thickness(0,8,0,8)};body.Children.Add(connection);
         var refresh=new Button{Content="刷新设备",FontSize=12,Padding=new Thickness(10,5,10,5),Margin=new Thickness(10,0,0,0)};DockPanel.SetDock(refresh,Dock.Right);connection.Children.Add(refresh);connection.Children.Add(status);
@@ -49,7 +51,7 @@ internal sealed class MixerPanel:Border,IDisposable
         tabs.Items.Add(new TabItem{Header="输出与 EQ",Content=outputBody,FontSize=13,Padding=new Thickness(12,6,12,6)});
         for(int i=0;i<5;i++){BuildStrip(inputs,true,i);BuildStrip(outputs,false,i);}
         BuildEq(outputBody);
-        body.Children.Add(new TextBlock{Text="将伴奏程序输出选为 Voicemeeter Input / AUX Input；直播软件选择 B1 或 B2 对应的 Voicemeeter 录音设备。A1/A2/A3 为监听输出。",FontSize=12,Foreground=new SolidColorBrush(Color.FromRgb(91,114,125)),Margin=new Thickness(0,10,0,0)});
+        body.Children.Add(new TextBlock{Text="电脑或伴奏软件选择“电脑声音 → 调音台 (VAIO)”或“伴奏 / 第二路声音 → 调音台 (AUX)”；直播软件选择“直播混音 1 (B1)”或“直播混音 2 (B2)”。未更名时对应 Voicemeeter Input / AUX Input、Out B1 / B2。",FontSize=12,Foreground=new SolidColorBrush(Color.FromRgb(91,114,125)),Margin=new Thickness(0,10,0,0)});
         timer.Tick+=(_,_)=>Poll();if(automaticPolling)timer.Start();Poll(true);
     }
     private void BuildStrip(System.Windows.Controls.Panel parent,bool input,int index)

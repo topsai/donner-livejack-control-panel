@@ -246,6 +246,15 @@ Test("Banana电平和EQ左右联动保持声道及总线索引",()=>
     Check(new[]{0,2,4,6,14}.SequenceEqual(Enumerable.Range(0,5).Select(MixerRules.InputLevelIndex)),"电平映射错误");
     Check(MixerRules.EqKeys(3,0,"gain",true).SequenceEqual(new[]{"Bus[3].EQ.channel[0].cell[0].gain","Bus[3].EQ.channel[1].cell[0].gain"}),"EQ联动写错目标");
 });
+Test("调音台设备别名保留路由身份且区分播放与录音",()=>
+{
+    Check(MixerNames.Endpoint("Voicemeeter Input",false)=="电脑声音 → 调音台 (VAIO)","主播放通道错误");
+    Check(MixerNames.Endpoint("Voicemeeter AUX Input",false)=="伴奏 / 第二路声音 → 调音台 (AUX)","AUX播放通道错误");
+    Check(MixerNames.Endpoint("Voicemeeter Out B1",true)=="直播混音 1 (B1)","直播输出映射错误");
+    Check(MixerNames.Endpoint("Voicemeeter Out B2",true)=="直播混音 2 (B2)","第二直播输出映射错误");
+    Check(MixerNames.Endpoint("Voicemeeter Input",true) is null&&MixerNames.Endpoint("Other microphone",true) is null,"误改其他方向或设备");
+    Check(MixerNames.Endpoint("Voicemeeter Out B3",true)!.Contains("Potato"),"不应将B3误标为Banana通道");
+});
 Console.WriteLine($"热插拔结果：{passed} 通过，{failures} 失败");
 return failures==0?0:1;
 

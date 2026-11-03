@@ -33,7 +33,7 @@
      <TextBlock Text="本功能面向不熟悉 Banana 等专业调音软件的用户。如果您已经安装并熟练使用 Banana，建议不要勾选；在此面板选择设备、调整路由或音效，可能改动您原有的 Banana 配置。" Foreground="#8A5B24" Margin="0,0,0,10"/>
      <TextBlock Text="启用后，顶部出现调音台入口，并按需启动 Voicemeeter Banana。首次使用会进入独立安装引导；默认不安装 Banana。" Foreground="#657887"/>
      <TextBlock x:Name="MixerSettingsStatus" Text="已关闭；不会安装或自动启动 Banana。" Margin="0,12,0,12"/>
-     <WrapPanel><Button Content="安装引导" Click="MixerGuideClick"/><Button Content="重连调音台" Click="MixerReconnectClick"/></WrapPanel>
+     <WrapPanel><Button Content="安装引导" Click="MixerGuideClick"/><Button Content="重连调音台" Click="MixerReconnectClick"/><Button Content="设备名称与用途" Click="MixerNamesClick"/></WrapPanel>
     </StackPanel></ScrollViewer></TabItem>
     <TabItem Header="面板说明"><local:FrontPanelGuide x:Name="PanelGuide"/></TabItem>
     <TabItem Header="关于"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="24,20">

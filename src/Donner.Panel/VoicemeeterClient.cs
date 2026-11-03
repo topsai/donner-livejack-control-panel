@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 using Donner.Core;
@@ -9,14 +10,14 @@ namespace Donner.Panel;
 internal sealed record MixerDevice(int Type,string Name)
 {
     public string Driver=>Type switch {1=>"mme",3=>"wdm",4=>"ks",5=>"asio",_=>throw new InvalidDataException("设备驱动类型无效。")};
-    public override string ToString()=>Name.Length==0?"未选择":$"{Driver.ToUpperInvariant()} · {Name}";
+    public override string ToString()=>Name.Length==0?"未选择":$"{Driver.ToUpperInvariant()} · {MixerNames.Display(Name)}";
 }
 internal interface IMixerClient:IDisposable
 {
     bool Connected {get;}
     string Status {get;}
     bool Refresh();
-    void Start();
+    void Start(bool show=false);
     float Get(string key);
     void Set(string key,float value);
     string DeviceName(bool input,int index);
@@ -39,6 +40,7 @@ internal sealed class VoicemeeterClient:IMixerClient
     [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] private static extern IntPtr LoadLibraryExW(string path,IntPtr reserved,uint flags);
     private IntPtr library;
     private bool loggedIn;
+    private bool? pendingWindow;
     private T Function<T>(string name) where T:Delegate=>Marshal.GetDelegateForFunctionPointer<T>(NativeLibrary.GetExport(library,"VBVMR_"+name));
     public bool Connected {get;private set;}
     public string Status {get;private set;}="尚未连接 Banana";
@@ -57,7 +59,7 @@ internal sealed class VoicemeeterClient:IMixerClient
         directories.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86),"VB","Voicemeeter"));
         directories.Add(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles),"VB","Voicemeeter"));
         return directories.FirstOrDefault(d=>File.Exists(Path.Combine(d,"VoicemeeterRemote64.dll"))&&
-            (File.Exists(Path.Combine(d,"voicemeeterpro.exe"))||File.Exists(Path.Combine(d,"voicemeeterpro64.exe"))));
+            (File.Exists(Path.Combine(d,"voicemeeterpro.exe"))||File.Exists(Path.Combine(d,"voicemeeterpro64.exe"))||File.Exists(Path.Combine(d,"voicemeeterpro_x64.exe"))));
     }
     public VoicemeeterClient():this(Path.Combine(InstalledDirectory()??throw new IOException("未安装 Voicemeeter Banana。"),"VoicemeeterRemote64.dll")){}
     internal VoicemeeterClient(string path)
@@ -73,9 +75,20 @@ internal sealed class VoicemeeterClient:IMixerClient
         int code=Function<ReadInt>("GetVoicemeeterType")(out var type);
         Connected=dirty>=0&&code==0&&type==2;
         Status=Connected?"已连接 Voicemeeter Banana":type is 1 or 3&&code==0&&dirty>=0?"当前运行的是其他 Voicemeeter 版本，请切换到 Banana。":"Banana 未运行或正在启动；如刚安装，请先重启 Windows。";
+        if(Connected&&pendingWindow is {} show){Check(Function<WriteFloat>("SetParameterFloat")("Command.Show",show?1:0),"显示调音台界面");pendingWindow=null;}
         return Connected;
     }
-    public void Start(){if(!Refresh()&&Status.Contains("其他"))throw new IOException(Status);Check(Function<Number>("RunVoicemeeter")(5),"启动 Banana");}
+    public void Start(bool show=false)
+    {
+        if(Refresh()) {Check(Function<WriteFloat>("SetParameterFloat")("Command.Show",show?1:0),"切换 Banana 界面");return;}
+        if(Status.Contains("其他"))throw new IOException(Status);
+        var directory=InstalledDirectory()??throw new IOException("未安装 Banana。");
+        var exe=new[]{"voicemeeterpro_x64.exe","voicemeeterpro64.exe","voicemeeterpro.exe"}.Select(x=>Path.Combine(directory,x)).FirstOrDefault(File.Exists)??throw new IOException("找不到 Banana 程序。");
+        pendingWindow=show;
+        var running=Process.GetProcessesByName(Path.GetFileNameWithoutExtension(exe));
+        bool alreadyRunning=running.Length>0;foreach(var item in running)item.Dispose();if(alreadyRunning)return;
+        using var process=Process.Start(new ProcessStartInfo(exe){UseShellExecute=true,WindowStyle=show?ProcessWindowStyle.Normal:ProcessWindowStyle.Hidden});
+    }
     private void Require(){if(!Connected)throw new IOException("Banana 尚未连接，请稍后重试。");}
     private static void Check(int code,string operation){if(code!=0)throw new IOException($"{operation}失败（Banana 返回 {code}）。");}
     public float Get(string key){Require();Check(Function<ReadFloat>("GetParameterFloat")(key,out var value),"读取参数");if(!float.IsFinite(value))throw new IOException("Banana 返回无效数值。");return value;}

@@ -8,7 +8,7 @@ public partial class MainWindow
 {
     private MixerPanel? mixerPanel;
     private bool mixerEnabled,mixerToggleBusy;
-    private long nextMixerStart;
+    private long nextMixerStart,nextEngineRetry;
     private readonly DispatcherTimer mixerRetry=new(){Interval=TimeSpan.FromSeconds(3)};
     private string MixerSettingsPath=>Path.Combine(storage,"mixer.json");
     private void InitializeMixer()
@@ -18,7 +18,13 @@ public partial class MainWindow
             if(smokeDirectory is not null)return;
             LoadMixerPreference();UpdateMixer();mixerRetry.Start();
         };
-        mixerRetry.Tick+=(_,_)=>{if(mixerEnabled&&mixerPanel is null)UpdateMixer();};
+        mixerRetry.Tick+=(_,_)=>
+        {
+            if(!mixerEnabled)return;
+            if(mixerPanel is null){UpdateMixer();return;}
+            if(!mixerPanel.Client.Connected&&Environment.TickCount64>=nextEngineRetry)
+            {nextEngineRetry=Environment.TickCount64+15000;try{mixerPanel.Client.Start();}catch(Exception error) when(error is IOException or System.ComponentModel.Win32Exception){MixerSettingsStatus.Text=error.Message;}}
+        };
         Closed+=(_,_)=>{mixerRetry.Stop();mixerPanel?.Dispose();};
     }
     private void LoadMixerPreference()
@@ -65,9 +71,9 @@ public partial class MainWindow
         IMixerClient? client=null;
         try
         {
-            client=new VoicemeeterClient();if(!client.Refresh())client.Start();
+            client=new VoicemeeterClient();client.Start();
             mixerPanel=new MixerPanel(client);client=null;MixerSlot.Content=mixerPanel;
-            MixerSettingsStatus.Text="已启用。打开 Donner 面板时会连接并按需启动 Banana；关闭此开关不会强制退出已运行的 Banana。";
+            MixerSettingsStatus.Text="已启用。打开 Donner 面板时会连接并按需在后台启动 Banana；关闭此开关不会强制退出已运行的 Banana。";
         }
         catch(Exception error) when(error is InvalidDataException or IOException or System.ComponentModel.Win32Exception or BadImageFormatException or EntryPointNotFoundException)
         {MixerSettingsStatus.Text=error.Message;MixerSlot.Content=new TextBlock{Text=error.Message+" 请完成安装并重启 Windows，或在应用设置中重连调音台。",Margin=new Thickness(14)};}
@@ -91,6 +97,8 @@ public partial class MainWindow
         if(!mixerEnabled){MixerSettingsStatus.Text="请先勾选“启用调音台功能”。";return;}
         mixerPanel?.Dispose();mixerPanel=null;nextMixerStart=0;UpdateMixer();
     }
+    private void MixerNamesClick(object sender,RoutedEventArgs e)
+    {try{MixerEndpointNames.Show(this,storage);}catch(Exception error) when(error is System.Runtime.InteropServices.COMException or IOException or InvalidDataException or UnauthorizedAccessException or System.Text.Json.JsonException){Record(error.Message);}}
     private void MixerGuideClick(object sender,RoutedEventArgs e)
     {
         if(new MixerSetupWindow{Owner=this}.ShowDialog()!=true)return;

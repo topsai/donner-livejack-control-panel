@@ -17,7 +17,8 @@ public partial class MainWindow
         internal bool DelayWrites;
         public string Status=>Connected?"测试连接":"测试断开";
         public bool Refresh()=>Connected;
-        public void Start(){}
+        public void Start(bool show=false){Starts.Add(show);}
+        internal readonly List<bool> Starts=[];
         public float Get(string key)=>Values.GetValueOrDefault(key,key.EndsWith(".f")?1000:key.EndsWith(".q")?1:0);
         public void Set(string key,float value){if(!Connected)throw new IOException("Disconnected");MixerRules.Validate(key,value);if(!DelayWrites)Values[key]=value;Writes.Add((key,value));}
         public string DeviceName(bool input,int index)=>Names.GetValueOrDefault((input,index),"");
@@ -32,7 +33,7 @@ public partial class MainWindow
         public bool Connected=>inner.Connected;
         public string Status=>inner.Status;
         public bool Refresh()=>inner.Refresh();
-        public void Start(){WriteAttempts++;throw new IOException("截图期间不启动 Banana。");}
+        public void Start(bool show=false){WriteAttempts++;throw new IOException("截图期间不启动 Banana。");}
         public float Get(string key)=>inner.Get(key);
         public void Set(string key,float value){WriteAttempts++;throw new IOException("截图期间禁止修改 Banana 参数。");}
         public string DeviceName(bool input,int index)=>inner.DeviceName(input,index);
@@ -55,7 +56,17 @@ public partial class MainWindow
         File.WriteAllText(MixerSettingsPath,"invalid json");LoadMixerPreference();UpdateMixer();
         if(mixerEnabled||MixerEnableCheck.IsChecked==true)throw new Exception("损坏设置自动启用调音台。");
         File.Delete(MixerSettingsPath);
+        var namesBackup=Path.Combine(storage,"mixer-endpoint-names.json");
+        foreach(var bad in new[]{"invalid json","[null]"})
+        {
+            File.WriteAllText(namesBackup,bad);MixerNamesClick(this,new RoutedEventArgs());
+            if(File.ReadAllText(namesBackup)!=bad)throw new Exception("损坏名称备份被修改。");
+        }
+        File.Delete(namesBackup);
         var fake=new TestMixer();using var panel=new MixerPanel(fake,false);
+        Visuals<Button>(panel).Single(x=>x.Content?.ToString()=="打开原界面").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        Visuals<Button>(panel).Single(x=>x.Content?.ToString()=="后台运行").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        if(!fake.Starts.SequenceEqual(new[]{true,false}))throw new Exception("后台运行与原界面操作未分开。");
         MixerSlot.Content=panel;mixerEnabled=true;UpdateMixerNavigation();Pages.SelectedIndex=0;
         if(Visuals<MixerPanel>(Pages).Any())throw new Exception("主页仍包含调音台。");
         MixerPageButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
