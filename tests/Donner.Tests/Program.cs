@@ -2,6 +2,14 @@ using Donner.Core;
 using System.Text.Json;
 using System.Diagnostics;
 
+if(args.Contains("--release-check"))
+{
+    using var http=new HttpClient{Timeout=TimeSpan.FromSeconds(10)};
+    var release=new GitHubUpdateClient(http).CheckAsync().GetAwaiter().GetResult();
+    Console.WriteLine(JsonSerializer.Serialize(new{Connected=true,Latest=release?.Tag,Page=release?.Page,NewerThan126=release?.IsNewerThan(new Version(1,26,0,0))==true}));
+    return 0;
+}
+
 if(args.Contains("--worker"))
 {
     while(Console.ReadLine() is {} line)
@@ -254,6 +262,17 @@ Test("调音台设备别名保留路由身份且区分播放与录音",()=>
     Check(MixerNames.Endpoint("Voicemeeter Out B2",true)=="直播混音 2 (B2)","第二直播输出映射错误");
     Check(MixerNames.Endpoint("Voicemeeter Input",true) is null&&MixerNames.Endpoint("Other microphone",true) is null,"误改其他方向或设备");
     Check(MixerNames.Endpoint("Voicemeeter Out B3",true)!.Contains("Potato"),"不应将B3误标为Banana通道");
+});
+Test("更新检查按数字版本比较并忽略预发布",()=>
+{
+    string Release(string tag,bool prerelease=false,bool draft=false)=>System.Text.Json.JsonSerializer.Serialize(new{tag_name=tag,prerelease,draft,body="更新说明"});
+    var newer=ReleaseUpdate.Parse(Release("v1.26"))!;
+    Check(newer.IsNewerThan(new Version(1,25,0,0)),"新版本未识别");
+    Check(!newer.IsNewerThan(new Version(1,26,0,0))&&!newer.IsNewerThan(new Version(1,27)),"相同或较旧版本误报");
+    Check(ReleaseUpdate.Parse(Release("v1.10"))!.IsNewerThan(new Version(1,9)),"使用了字符串排序");
+    Check(ReleaseUpdate.Parse(Release("v9.0",true)) is null&&ReleaseUpdate.Parse(Release("v9.0",false,true)) is null,"草稿或预发布误报");
+    Reject(()=>ReleaseUpdate.Parse(Release("v1.27-beta")));
+    Check(newer.Page.AbsoluteUri=="https://github.com/topsai/donner-livejack-control-panel/releases/tag/v1.26","下载页越出项目");
 });
 Console.WriteLine($"热插拔结果：{passed} 通过，{failures} 失败");
 return failures==0?0:1;
