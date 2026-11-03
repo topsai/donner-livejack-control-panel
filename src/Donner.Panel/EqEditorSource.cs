@@ -16,6 +16,7 @@ internal interface IEqEditorSource
 }
 internal sealed class OutputEqSource(Func<string,float> read,Action<string,float> write,Func<int> rate):IEqEditorSource
 {
+    internal event Action<int,bool>? EnabledChanged;
     private readonly Dictionary<(int,int),(long Updated,MicrophoneEqSettings Settings)> cache=[];
     private static MicrophoneEqSettings Copy(MicrophoneEqSettings value)=>value with{Bands=(EqBand[])value.Bands.Clone()};
     public bool IsOutput=>true;
@@ -58,5 +59,6 @@ internal sealed class OutputEqSource(Func<string,float> read,Action<string,float
         foreach(var pair in changes)MixerRules.Validate(pair.Item1,pair.Item2);
         foreach(var pair in changes)write(pair.Item1,pair.Item2);
         cache[(target,channel)]=(Environment.TickCount64,Copy(settings));if(linked)cache.Remove((target,1-channel));
+        if(old.Enabled!=settings.Enabled)EnabledChanged?.Invoke(target,settings.Enabled);
     }
 }

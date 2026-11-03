@@ -24,7 +24,9 @@ internal sealed class MixerPanel:Border,IDisposable
     private bool updating,wasConnected,disposed;
     private readonly List<Button> microphoneEqButtons=[];
     private readonly List<System.Windows.Shapes.Ellipse> microphoneEqDots=[];
-    private int selectedMicrophone;
+    private int selectedMicrophone,selectedOutput;
+    private readonly List<Button> outputEqButtons=[];
+    private readonly List<System.Windows.Shapes.Ellipse> outputEqDots=[];
     private readonly EqEditor inputEditor;
     private readonly EqEditor outputEditor;
     internal IMixerClient Client=>client;
@@ -35,7 +37,8 @@ internal sealed class MixerPanel:Border,IDisposable
     {
         this.client=client;microphoneEq=new(client as VoicemeeterClient,eqStorage is null?null:Path.Combine(eqStorage,"microphone-eq.json"));
         inputEditor=new(microphoneEq,SelectedInputDevice);inputEditor.TargetChanged+=UpdateMicrophoneSelection;microphoneEq.Changed+=UpdateMicrophoneEqDot;
-        outputEditor=new(new OutputEqSource(key=>pending.TryGetValue(key,out var value)?value:ReadValue(key),Queue,()=>{try{return (int)client.Get("Option.sr") is var rate&&rate>=8000?rate:48000;}catch(IOException){return 48000;}}));
+        var outputSource=new OutputEqSource(key=>pending.TryGetValue(key,out var value)?value:ReadValue(key),Queue,()=>{try{return (int)client.Get("Option.sr") is var rate&&rate>=8000?rate:48000;}catch(IOException){return 48000;}});
+        outputEditor=new(outputSource,SelectedOutputDevice);outputEditor.TargetChanged+=UpdateOutputSelection;outputSource.EnabledChanged+=UpdateOutputEqDot;
         Background=new SolidColorBrush(Color.FromRgb(248,250,251));BorderBrush=new SolidColorBrush(Color.FromRgb(227,233,237));
         BorderThickness=new Thickness(1);CornerRadius=new CornerRadius(8);Padding=new Thickness(14);Margin=new Thickness(0);
         var body=new StackPanel();Child=body;var heading=new DockPanel();body.Children.Add(heading);
@@ -77,7 +80,7 @@ internal sealed class MixerPanel:Border,IDisposable
         if(index<3)
         {
             var combo=new ComboBox{MinWidth=0,Height=29,FontSize=11,Margin=new Thickness(0,6,0,4),ToolTip="选择音频设备；更改会重新连接音频引擎。"};box.Children.Add(combo);devices.Add((combo,input,index));
-            combo.SelectionChanged+=(_,_)=>{if(!updating&&combo.SelectedItem is MixerDevice choice)Attempt(()=>client.SetDevice(input,index,choice));if(input)inputEditor.RefreshTargetInfo();};
+            combo.SelectionChanged+=(_,_)=>{if(!updating&&combo.SelectedItem is MixerDevice choice)Attempt(()=>client.SetDevice(input,index,choice));if(input)inputEditor.RefreshTargetInfo();else outputEditor.RefreshTargetInfo();};
         }
         else box.Children.Add(new TextBlock{Text=input?"虚拟播放输入":"虚拟录音输出",FontSize=11,HorizontalAlignment=HorizontalAlignment.Center,Margin=new Thickness(0,10,0,8)});
         var faderRow=new Grid{Height=94};faderRow.ColumnDefinitions.Add(new());faderRow.ColumnDefinitions.Add(new(){Width=new GridLength(14)});box.Children.Add(faderRow);
@@ -118,6 +121,15 @@ internal sealed class MixerPanel:Border,IDisposable
         readers.Add(()=>{if(!slider.IsMouseCaptureWithin&&!value.IsKeyboardFocusWithin&&!pending.ContainsKey(prefix+".Gain")){slider.Value=ReadValue(prefix+".Gain");value.Text=GainText();}});
         var switches=new WrapPanel{HorizontalAlignment=HorizontalAlignment.Center};box.Children.Add(switches);
         AddCheck(switches,"静音",prefix+".Mute");AddCheck(switches,"单声道",prefix+".Mono");
+        if(!input)
+        {
+            var button=new Button{FontSize=11,Padding=new Thickness(8,4,8,4),Margin=new Thickness(0,8,0,3),Tag=$"OutputEq.{index}"};
+            var caption=new StackPanel{Orientation=Orientation.Horizontal};caption.Children.Add(new TextBlock{Text=$"{(index<3?$"A{index+1}":$"B{index-2}")} EQ",VerticalAlignment=VerticalAlignment.Center});
+            var dot=new System.Windows.Shapes.Ellipse{Width=8,Height=8,Margin=new Thickness(8,0,0,0),VerticalAlignment=VerticalAlignment.Center,Tag=$"OutputEqDot.{index}"};caption.Children.Add(dot);button.Content=caption;box.Children.Add(button);outputEqButtons.Add(button);outputEqDots.Add(dot);
+            UpdateOutputEqDot(index,false);UpdateOutputSelection(selectedOutput);
+            button.Click+=(_,_)=>{outputEditor.SelectInput(index);outputEditor.BringIntoView();};
+            readers.Add(()=>UpdateOutputEqDot(index,(pending.TryGetValue($"Bus[{index}].EQ.on",out var state)?state:ReadValue($"Bus[{index}].EQ.on"))>.5f));
+        }
         if(input)
         {
             var routes=new WrapPanel{HorizontalAlignment=HorizontalAlignment.Center,Margin=new Thickness(0,7,0,5)};box.Children.Add(routes);
@@ -127,6 +139,23 @@ internal sealed class MixerPanel:Border,IDisposable
                 box.Children.Add(micEq);microphoneEqButtons.Add(micEq);microphoneEqDots.Add(dot);UpdateMicrophoneEqDot(index);UpdateMicrophoneSelection(selectedMicrophone);micEq.Click+=(_,_)=>{inputEditor.SelectInput(index);inputEditor.BringIntoView();};}
             if(index<3){AddNumber(box,"压缩",prefix+".Comp",0,10,.1f);AddNumber(box,"噪声门",prefix+".Gate",0,10,.1f);}
             else for(int band=1;band<=3;band++)AddNumber(box,new[]{"低频","中频","高频"}[band-1],prefix+$".EQGain{band}",-12,12,.1f);
+        }
+    }
+    private string SelectedOutputDevice(int index)=>index<3?devices.FirstOrDefault(d=>!d.Input&&d.Index==index).Combo?.SelectedItem?.ToString()??"未选择":$"直播混音 {index-2} (B{index-2})";
+    private void UpdateOutputEqDot(int index,bool enabled)
+    {
+        if(index<0||index>=outputEqDots.Count)return;
+        var color=enabled?Color.FromRgb(35,198,116):Color.FromRgb(145,157,167);
+        if(outputEqDots[index].Fill is not SolidColorBrush previous||previous.Color!=color)outputEqDots[index].Fill=new SolidColorBrush(color);
+        outputEqDots[index].ToolTip=enabled?"EQ 已启用":"EQ 未启用";
+    }
+    private void UpdateOutputSelection(int index)
+    {
+        selectedOutput=index;
+        for(int i=0;i<outputEqButtons.Count;i++)
+        {
+            bool active=i==index;var button=outputEqButtons[i];
+            button.Background=new SolidColorBrush(active?Color.FromRgb(20,119,159):Color.FromRgb(235,242,245));button.Foreground=active?Brushes.White:new SolidColorBrush(Color.FromRgb(22,42,52));button.FontWeight=active?FontWeights.SemiBold:FontWeights.Normal;
         }
     }
     private void UpdateMicrophoneEqDot(int index)
@@ -210,7 +239,7 @@ internal sealed class MixerPanel:Border,IDisposable
                 try{foreach(var read in readers)read();
                     foreach(var d in devices)if(!d.Combo.IsDropDownOpen&&!d.Combo.IsKeyboardFocusWithin){var name=client.DeviceName(d.Input,d.Index);if(d.Combo.SelectedItem is not MixerDevice selected||selected.Name!=name)d.Combo.SelectedItem=d.Combo.Items.Cast<MixerDevice>().FirstOrDefault(x=>x.Name==name);}}
                 finally{updating=false;}
-                inputEditor.RefreshTargetInfo();
+                inputEditor.RefreshTargetInfo();outputEditor.RefreshTargetInfo();
                 nextRead=now+500;
             }
         });

@@ -42,8 +42,8 @@ internal sealed class EqEditor:Border,IDisposable
         foreach(var height in new[]{GridLength.Auto,new GridLength(260),GridLength.Auto,GridLength.Auto})body.RowDefinitions.Add(new(){Height=height});
         var header=new DockPanel{Margin=new Thickness(0,0,0,12)};body.Children.Add(header);
         var reset=new Button{Content="恢复平直",FontSize=12,Padding=new Thickness(10,6,10,6),Margin=new Thickness(12,0,0,0)};DockPanel.SetDock(reset,Dock.Right);header.Children.Add(reset);
-        var headerLeft=new WrapPanel();header.Children.Add(headerLeft);if(source.IsOutput){headerLeft.Children.Add(input);headerLeft.Children.Add(channel);headerLeft.Children.Add(linked);}headerLeft.Children.Add(enabled);
-        if(!source.IsOutput){headerLeft.Children.Add(new TextBlock{Text="输出增益",VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(20,0,8,0)});headerLeft.Children.Add(preamp);headerLeft.Children.Add(new TextBlock{Text="dB",VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(5,0,0,0)});headerLeft.Children.Add(deviceLabel);}
+        var headerLeft=new WrapPanel();header.Children.Add(headerLeft);if(source.IsOutput){headerLeft.Children.Add(channel);headerLeft.Children.Add(linked);}headerLeft.Children.Add(enabled);
+        if(!source.IsOutput){headerLeft.Children.Add(new TextBlock{Text="输出增益",VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(20,0,8,0)});headerLeft.Children.Add(preamp);headerLeft.Children.Add(new TextBlock{Text="dB",VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(5,0,0,0)});}headerLeft.Children.Add(deviceLabel);
         Grid.SetRow(Graph,1);body.Children.Add(Graph);
         var editor=new StackPanel{Margin=new Thickness(0,10,0,0)};Grid.SetRow(editor,2);body.Children.Add(editor);editor.Children.Add(bandButtons);
         for(int i=0;i<6;i++)
@@ -90,8 +90,7 @@ internal sealed class EqEditor:Border,IDisposable
     }
     internal void RefreshTargetInfo()
     {
-        if(source.IsOutput)return;
-        enabled.Content=$"启用输入 {index+1} EQ";
+        enabled.Content=source.IsOutput?$"启用{(index<3?$"A{index+1}":$"B{index-2}")} EQ":$"启用输入 {index+1} EQ";
         string text="设备："+(deviceName?.Invoke(index)??"未选择");
         if(deviceLabel.Text!=text){deviceLabel.Text=text;deviceLabel.ToolTip=text;}
     }

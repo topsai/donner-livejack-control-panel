@@ -1,0 +1,21 @@
+{
+  "Version": "1.37",
+  "BuildAndUiSmokePassed": true,
+  "OutputButtons": [
+    "A1",
+    "A2",
+    "A3",
+    "B1",
+    "B2"
+  ],
+  "DefaultTarget": "A1",
+  "SelectionAndDeviceCaption": true,
+  "EnabledDotImmediateAndReadback": true,
+  "LeftRightIsolationAndLinkedReset": true,
+  "ReadOnlyCapture": {
+    "Connected": true,
+    "WriteAttempts": 0,
+    "AudioPathTested": false,
+    "Error": null
+  }
+}
