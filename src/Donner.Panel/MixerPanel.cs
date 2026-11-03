@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -49,12 +49,13 @@ internal sealed class MixerPanel:Border,IDisposable
         titleAndRates.Children.Add(new TextBlock{Text="调音台",FontSize=18,FontWeight=FontWeights.SemiBold,VerticalAlignment=VerticalAlignment.Center});
         if(sampleRates is MixerSampleRates rates){Grid.SetColumn(rates.HeaderView,1);titleAndRates.Children.Add(rates.HeaderView);}
         heading.Children.Add(titleAndRates);
-        var connection=new DockPanel{Margin=new Thickness(0,8,0,8)};body.Children.Add(connection);
-        var refresh=new Button{Content="刷新设备",FontSize=12,Padding=new Thickness(10,5,10,5),Margin=new Thickness(10,0,0,0)};DockPanel.SetDock(refresh,Dock.Right);connection.Children.Add(refresh);connection.Children.Add(status);
+        var connection=new StackPanel{Orientation=Orientation.Horizontal,Margin=new Thickness(10,0,0,0),VerticalAlignment=VerticalAlignment.Center};
+        var refresh=new Button{Content="刷新设备",FontSize=12,Padding=new Thickness(10,5,10,5),Margin=new Thickness(0,0,12,0)};connection.Children.Add(refresh);connection.Children.Add(status);
+        status.MaxWidth=330;status.TextTrimming=TextTrimming.CharacterEllipsis;status.SetBinding(ToolTipProperty,new System.Windows.Data.Binding("Text"){Source=status});
         refresh.Click+=(_,_)=>Attempt(()=>{if(client.Refresh())RefreshDevices();Poll(true);});
         if(sampleRates is not null){body.Children.Add(sampleRates);settings=sampleRates as IDisposable;}
         body.Children.Add(controls);
-        var tabs=new TabControl{Background=Brushes.Transparent,BorderThickness=new Thickness(0)};controls.Children.Add(tabs);
+        var tabs=new TabControl{Background=Brushes.Transparent,BorderThickness=new Thickness(0),Margin=new Thickness(0,8,0,0),Tag=connection,Template=(ControlTemplate)FindResource("MixerTabsTemplate")};controls.Children.Add(tabs);
         var inputs=new System.Windows.Controls.Primitives.UniformGrid{Rows=1};var outputs=new System.Windows.Controls.Primitives.UniformGrid{Rows=1};
         tabs.Items.Add(new TabItem{Header="输入混音",Content=inputs,FontSize=13,Padding=new Thickness(12,6,12,6)});
         var outputBody=new StackPanel();outputBody.Children.Add(outputs);
@@ -79,18 +80,38 @@ internal sealed class MixerPanel:Border,IDisposable
         var slider=new Slider{Orientation=Orientation.Vertical,IsMoveToPointEnabled=true,Minimum=-60,Maximum=12,TickFrequency=.1,IsSnapToTickEnabled=true,SmallChange=.1,LargeChange=1,Height=90,Width=36,Style=(Style)FindResource("ChannelFader")};faderRow.Children.Add(slider);
         var meter=new ChannelMeter{Width=10,Height=88,VerticalAlignment=VerticalAlignment.Center};Grid.SetColumn(meter,1);faderRow.Children.Add(meter);
         meters.Add(()=>meter.Peak=client.Level(input,index));
-        var value=new Button{Content="0.0 dB",Tag=prefix+".Gain.reset",FontSize=12,HorizontalAlignment=HorizontalAlignment.Center,Padding=new Thickness(6,2,6,2),Margin=new Thickness(0,4,0,4),ToolTip="点击数值归零（0 dB 不增不减）；双击推子也可归零。"};box.Children.Add(value);
+        var gainRow=new StackPanel{Orientation=Orientation.Horizontal,HorizontalAlignment=HorizontalAlignment.Center,Margin=new Thickness(0,4,0,4)};box.Children.Add(gainRow);
+        var value=new TextBox{Text="0.0",Tag=prefix+".Gain",Width=58,FontSize=12,TextAlignment=TextAlignment.Center,Padding=new Thickness(3,2,3,2),ToolTip="输入 -60 至 +12 dB，支持一位小数；按 Enter 或离开输入框应用。输入 0 归零。"};gainRow.Children.Add(value);
+        gainRow.Children.Add(new TextBlock{Text="dB",FontSize=12,VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(4,0,0,0)});
+        string GainText()=>slider.Value.ToString("0.0",CultureInfo.CurrentCulture);
+        bool enteringGain=false;
+        void CommitGain()
+        {
+            if(updating)return;
+            if(double.TryParse(value.Text,NumberStyles.Float,CultureInfo.CurrentCulture,out var gain)&&double.IsFinite(gain)&&gain>=-60&&gain<=12)
+            {
+                gain=Math.Round(gain,1,MidpointRounding.AwayFromZero);
+                enteringGain=true;try{slider.Value=gain;}finally{enteringGain=false;}
+                Queue(prefix+".Gain",(float)gain);value.Text=GainText();
+            }
+            else{status.Text="分贝请输入 -60 至 +12 的数字。";value.Text=GainText();}
+        }
+        value.LostKeyboardFocus+=(_,_)=>CommitGain();
+        value.KeyDown+=(_,e)=>
+        {
+            if(e.Key==System.Windows.Input.Key.Enter){CommitGain();value.MoveFocus(new System.Windows.Input.TraversalRequest(System.Windows.Input.FocusNavigationDirection.Next));e.Handled=true;}
+            else if(e.Key==System.Windows.Input.Key.Escape){value.Text=GainText();value.MoveFocus(new System.Windows.Input.TraversalRequest(System.Windows.Input.FocusNavigationDirection.Next));e.Handled=true;}
+        };
         slider.ToolTip="-60 至 +12 dB；靠近 0 dB 自动吸附。双击归零；方向键按 0.1 dB 微调。";
         void ResetGain(){slider.Focus();slider.Value=0;if(!updating)Queue(prefix+".Gain",0);}
-        value.Click+=(_,_)=>ResetGain();
         slider.PreviewMouseDoubleClick+=(_,e)=>{if(e.ChangedButton==System.Windows.Input.MouseButton.Left){ResetGain();e.Handled=true;}};
         slider.ValueChanged+=(_,_)=>
         {
-            if(!updating&&(slider.IsMouseCaptureWithin||slider.IsMouseOver&&System.Windows.Input.Mouse.LeftButton==System.Windows.Input.MouseButtonState.Pressed))
+            if(!updating&&!enteringGain&&(slider.IsMouseCaptureWithin||slider.IsMouseOver&&System.Windows.Input.Mouse.LeftButton==System.Windows.Input.MouseButtonState.Pressed))
             {var snapped=MixerFaderValue.Pointer(slider.Value);if(snapped!=slider.Value)slider.Value=snapped;}
-            value.Content=$"{slider.Value:0.0} dB";if(!updating)Queue(prefix+".Gain",(float)slider.Value);
+            if(!value.IsKeyboardFocusWithin)value.Text=GainText();if(!updating)Queue(prefix+".Gain",(float)slider.Value);
         };
-        readers.Add(()=>{if(!slider.IsMouseCaptureWithin&&!pending.ContainsKey(prefix+".Gain"))slider.Value=ReadValue(prefix+".Gain");});
+        readers.Add(()=>{if(!slider.IsMouseCaptureWithin&&!value.IsKeyboardFocusWithin&&!pending.ContainsKey(prefix+".Gain")){slider.Value=ReadValue(prefix+".Gain");value.Text=GainText();}});
         var switches=new WrapPanel{HorizontalAlignment=HorizontalAlignment.Center};box.Children.Add(switches);
         AddCheck(switches,"静音",prefix+".Mute");AddCheck(switches,"单声道",prefix+".Mono");
         if(input)

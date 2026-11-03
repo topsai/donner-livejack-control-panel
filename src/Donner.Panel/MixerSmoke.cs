@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -104,8 +104,12 @@ public partial class MainWindow
         if(fake.Values.GetValueOrDefault("Strip[0].Mute")!=1)throw new Exception("调音台静音未写入。");
         var count=fake.Writes.Count;fake.Values["Strip[1].Gain"]=-18;panel.Poll(true);
         if(!ReferenceEquals(fader,Visuals<Slider>(panel).First())||fake.Writes.Count!=count)throw new Exception("调音台刷新重建控件或触发回写。");
-        var reset=Visuals<Button>(panel).First(x=>x.Tag?.ToString()=="Strip[0].Gain.reset");
-        fader.Value=-7;panel.Poll(true);reset.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));panel.Poll(true);
+        var reset=Visuals<TextBox>(panel).First(x=>x.Tag?.ToString()=="Strip[0].Gain");
+        void SubmitGain(TextBox field,string text){field.Text=text;field.RaiseEvent(new System.Windows.Input.KeyboardFocusChangedEventArgs(System.Windows.Input.Keyboard.PrimaryDevice,Environment.TickCount,field,null){RoutedEvent=System.Windows.Input.Keyboard.LostKeyboardFocusEvent});panel.Poll(true);}
+        SubmitGain(reset,"-6.3");if(Math.Abs(fake.Values.GetValueOrDefault("Strip[0].Gain")+6.3f)>.001||Math.Abs(fader.Value+6.3)>.001)throw new Exception("直接输入未同步推子与增益。");
+        var writesBeforeInvalid=fake.Writes.Count;foreach(var bad in new[]{"13","-61","NaN","abc",""})SubmitGain(reset,bad);
+        if(fake.Writes.Count!=writesBeforeInvalid)throw new Exception("无效分贝输入写入了设备。");
+        fader.Value=-7;panel.Poll(true);SubmitGain(reset,"0");
         if(fader.Value!=0||fake.Values.GetValueOrDefault("Strip[0].Gain")!=0)throw new Exception("点击增益数值未精确归零。");
         fader.Value=-5;panel.Poll(true);
         fader.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(System.Windows.Input.Mouse.PrimaryDevice,Environment.TickCount,System.Windows.Input.MouseButton.Left){RoutedEvent=Control.PreviewMouseDoubleClickEvent});panel.Poll(true);
@@ -114,8 +118,8 @@ public partial class MainWindow
         SaveImage("mixer-inputs.png");
         var tabs=Visuals<TabControl>(panel).Single();tabs.SelectedIndex=1;
         await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);panel.Poll(true);
-        var outputReset=Visuals<Button>(panel).First(x=>x.Tag?.ToString()=="Bus[0].Gain.reset");
-        var outputFader=Visuals<Slider>(panel).First();outputFader.Value=6;panel.Poll(true);outputReset.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));panel.Poll(true);
+        var outputReset=Visuals<TextBox>(panel).First(x=>x.Tag?.ToString()=="Bus[0].Gain");
+        var outputFader=Visuals<Slider>(panel).First();outputFader.Value=6;panel.Poll(true);SubmitGain(outputReset,"0");
         if(outputFader.Value!=0||fake.Values.GetValueOrDefault("Bus[0].Gain")!=0||Math.Abs(fake.Values.GetValueOrDefault("Strip[0].Gain")-.1f)>.001)throw new Exception("输出归零作用到了错误的通道。");
         fake.Values["Bus[0].Mono"]=2;panel.Poll(true);
         if(Visuals<CheckBox>(panel).First(x=>x.Content?.ToString()=="单声道").IsChecked==true)throw new Exception("立体声反转被显示成了单声道。");

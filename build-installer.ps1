@@ -1,4 +1,4 @@
-param(
+﻿param(
     [Parameter(Mandatory=$true)][string]$DriverInstaller,
     [string]$Compiler,
     [switch]$SkipAppBuild
@@ -28,5 +28,5 @@ $appFiles=Join-Path $taskRoot 'dist\DonnerControlPanel'
 if (!(Test-Path -LiteralPath (Join-Path $appFiles 'DonnerControlPanel.exe'))) {throw 'Publish the application first.'}
 & $Compiler ('/DAppFiles='+$appFiles) ('/DDriverInstaller='+$driver.FullName) ('/DSetupOutput='+(Join-Path $taskRoot 'dist')) (Join-Path $taskRoot 'installer\DonnerControlPanel.iss')
 if ($LASTEXITCODE -ne 0) {throw 'Installer compilation failed.'}
-$output=Join-Path $taskRoot 'dist\DonnerControlPanel-v1.29-Setup-win-x64.exe'
+$output=Join-Path $taskRoot 'dist\DonnerControlPanel-v1.30-Setup-win-x64.exe'
 Get-FileHash -LiteralPath $output -Algorithm SHA256
