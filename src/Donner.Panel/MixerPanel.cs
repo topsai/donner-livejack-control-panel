@@ -10,6 +10,7 @@ namespace Donner.Panel;
 internal sealed class MixerPanel:Border,IDisposable
 {
     private readonly IMixerClient client;
+    private readonly IDisposable? settings;
     private readonly TextBlock status=new(){FontSize=12,VerticalAlignment=VerticalAlignment.Center};
     private readonly StackPanel controls=new();
     private readonly List<Action> readers=[];
@@ -30,7 +31,7 @@ internal sealed class MixerPanel:Border,IDisposable
     internal int PendingCount=>pending.Count;
     internal bool ControlsEnabled=>controls.IsEnabled;
     internal static string BusName(int i)=>i switch{0=>"A1 监听",1=>"A2 输出",2=>"A3 输出",3=>"B1 直播",_=>"B2 直播"};
-    public MixerPanel(IMixerClient client,bool automaticPolling=true)
+    public MixerPanel(IMixerClient client,bool automaticPolling=true,FrameworkElement? sampleRates=null,Action? editNames=null)
     {
         this.client=client;Background=new SolidColorBrush(Color.FromRgb(248,250,251));BorderBrush=new SolidColorBrush(Color.FromRgb(227,233,237));
         BorderThickness=new Thickness(1);CornerRadius=new CornerRadius(8);Padding=new Thickness(14);Margin=new Thickness(0);
@@ -39,10 +40,16 @@ internal sealed class MixerPanel:Border,IDisposable
         open.Click+=(_,_)=>Attempt(()=>client.Start(true));
         var background=new Button{Content="后台运行",FontSize=12,Padding=new Thickness(10,6,10,6),Margin=new Thickness(10,0,0,0)};
         DockPanel.SetDock(background,Dock.Right);heading.Children.Insert(0,background);background.Click+=(_,_)=>Attempt(()=>client.Start());
+        if(editNames is not null)
+        {
+            var names=new Button{Content="设备名称",FontSize=12,Padding=new Thickness(10,6,10,6),Margin=new Thickness(10,0,0,0)};
+            DockPanel.SetDock(names,Dock.Right);heading.Children.Insert(0,names);names.Click+=(_,_)=>editNames();
+        }
         heading.Children.Add(new TextBlock{Text="调音台",FontSize=18,FontWeight=FontWeights.SemiBold,VerticalAlignment=VerticalAlignment.Center});
         var connection=new DockPanel{Margin=new Thickness(0,8,0,8)};body.Children.Add(connection);
         var refresh=new Button{Content="刷新设备",FontSize=12,Padding=new Thickness(10,5,10,5),Margin=new Thickness(10,0,0,0)};DockPanel.SetDock(refresh,Dock.Right);connection.Children.Add(refresh);connection.Children.Add(status);
         refresh.Click+=(_,_)=>Attempt(()=>{if(client.Refresh())RefreshDevices();Poll(true);});
+        if(sampleRates is not null){body.Children.Add(sampleRates);settings=sampleRates as IDisposable;}
         body.Children.Add(controls);
         var tabs=new TabControl{Background=Brushes.Transparent,BorderThickness=new Thickness(0)};controls.Children.Add(tabs);
         var inputs=new System.Windows.Controls.Primitives.UniformGrid{Rows=1};var outputs=new System.Windows.Controls.Primitives.UniformGrid{Rows=1};
@@ -149,7 +156,7 @@ internal sealed class MixerPanel:Border,IDisposable
         }
         return actual;
     }
-    private void RefreshDevices()
+    internal void RefreshDevices()
     {
         var input=client.Devices(true);var output=client.Devices(false);
         updating=true;try{foreach(var d in devices){var source=(d.Input?input:output).Where(v=>v.Type!=5||!d.Input&&d.Index==0).ToArray();d.Combo.ItemsSource=source;var name=client.DeviceName(d.Input,d.Index);d.Combo.SelectedItem=source.FirstOrDefault(v=>v.Name==name&&v.Type==3)??source.FirstOrDefault(v=>v.Name==name);}}finally{updating=false;}
@@ -182,5 +189,5 @@ internal sealed class MixerPanel:Border,IDisposable
     }
     private void Attempt(Action action)
     {try{action();}catch(Exception e) when(e is InvalidDataException or IOException or InvalidOperationException or System.ComponentModel.Win32Exception){status.Text=e.Message;pending.Clear();awaiting.Clear();controls.IsEnabled=false;wasConnected=false;}}
-    public void Dispose(){if(disposed)return;disposed=true;timer.Stop();pending.Clear();awaiting.Clear();client.Dispose();}
+    public void Dispose(){if(disposed)return;disposed=true;timer.Stop();settings?.Dispose();pending.Clear();awaiting.Clear();client.Dispose();}
 }

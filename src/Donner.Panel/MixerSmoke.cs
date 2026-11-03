@@ -40,6 +40,7 @@ public partial class MainWindow
         public MixerDevice[] Devices(bool input)=>inner.Devices(input);
         public void SetDevice(bool input,int index,MixerDevice device){WriteAttempts++;throw new IOException("截图期间禁止修改设备。");}
         public float Level(bool input,int index)=>inner.Level(input,index);
+        public float ChannelLevel(bool input,int index,int channel)=>inner.ChannelLevel(input,index,channel);
         public void Dispose()=>inner.Dispose();
     }
     private static IEnumerable<T> Visuals<T>(DependencyObject parent) where T:DependencyObject
@@ -56,6 +57,8 @@ public partial class MainWindow
         File.WriteAllText(MixerSettingsPath,"invalid json");LoadMixerPreference();UpdateMixer();
         if(mixerEnabled||MixerEnableCheck.IsChecked==true)throw new Exception("损坏设置自动启用调音台。");
         File.Delete(MixerSettingsPath);
+        var customChecks=MixerEndpointNamesSmoke.Verify();await MixerSampleRatesSmoke.VerifyAsync();
+        File.WriteAllText(Path.Combine(smokeDirectory!,"mixer-extended-checks.json"),JsonSerializer.Serialize(new{Success=true,CustomNames=customChecks,SampleRates=true}));
         var namesBackup=Path.Combine(storage,"mixer-endpoint-names.json");
         foreach(var bad in new[]{"invalid json","[null]"})
         {
@@ -126,22 +129,35 @@ public partial class MainWindow
             if(VoicemeeterClient.InstalledDirectory() is null)return;
             using var client=new ReadOnlyMixer(new VoicemeeterClient());
             if(!client.Refresh())return;
-            connected=true;Feedback.Text="已连接 Voicemeeter Banana";using var livePanel=new MixerPanel(client,false);
+            connected=true;Feedback.Text="已连接 Voicemeeter Banana";using var livePanel=new MixerPanel(client,false,new MixerSampleRates(client,()=>session.Snapshot,_=>throw new IOException("截图期间禁止修改声卡。"),false),()=>{});
             mixerEnabled=true;UpdateMixerNavigation();MixerSlot.Content=livePanel;Pages.SelectedItem=MixerPage;
             Width=1100;Height=820;await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);
             livePanel.Poll(true);
             if(!livePanel.ControlsEnabled)throw new IOException("真实 Banana 参数读取失败，未生成已连接截图。");
-            SaveImage("mixer-live-inputs.png");
+            var rates=Visuals<Expander>(livePanel).Single();rates.IsExpanded=true;
+            await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);SaveImage("mixer-live-rates.png");rates.IsExpanded=false;
+            await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);SaveImage("mixer-live-inputs.png");
             Visuals<TabControl>(livePanel).Single().SelectedIndex=1;
             await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);livePanel.Poll(true);
             Visuals<ScrollViewer>(Pages).First().ScrollToTop();await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);
-            SaveImage("mixer-live-eq.png");writes=client.WriteAttempts;
+            SaveImage("mixer-live-eq.png");
+            mixerPanel=livePanel;Pages.SelectedIndex=0;MeterCheck.IsChecked=true;nextMixerMeterRoute=0;
+            await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);UpdateMeters();
+            var routed=ReadMixerHomeOutput(out var meterAvailable,out var outputLeft,out var outputRight);
+            File.WriteAllText(Path.Combine(smokeDirectory!,"mixer-home-meters.json"),JsonSerializer.Serialize(new{MappedToLivejack=routed,OutputAvailable=meterAvailable,Bus=mixerOutputBus,OutputLeft=outputLeft,OutputRight=outputRight,LoopbackCaptureRequested=levels?.CapturesOutput},new JsonSerializerOptions{WriteIndented=true}));
+            if(routed&&(!meterAvailable||levels?.CapturesOutput==true))throw new IOException("主页没有使用独占兼容的 Banana 输出电平。");
+            Width=900;Height=620;await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);SaveImage("home-with-mixer.png");
+            var held=levels;levels=null;MeterCheck.IsChecked=false;
+            try{UpdateMeters();if(meterViews.Values.Any(x=>x.Visibility==Visibility.Visible))throw new IOException("关闭电平后仍显示调音台输出。");}
+            finally{held?.Dispose();}
+            MeterCheck.IsChecked=true;StopMeters();mixerPanel=null;
+            writes=client.WriteAttempts;
             if(writes!=0)throw new IOException("真实截图发生参数写入尝试，已阻止。");
         }
         catch(Exception e) when(e is IOException or System.ComponentModel.Win32Exception){error=e.Message;}
         finally
         {
-            MixerSlot.Content=null;mixerEnabled=false;UpdateMixerNavigation();Width=width;Height=height;Feedback.Text=feedback;
+            StopMeters();mixerPanel=null;MixerSlot.Content=null;mixerEnabled=false;UpdateMixerNavigation();Width=width;Height=height;Feedback.Text=feedback;
             File.WriteAllText(Path.Combine(smokeDirectory!,"mixer-live-check.json"),JsonSerializer.Serialize(new{Connected=connected,WriteAttempts=writes,AudioPathTested=false,Error=error},new JsonSerializerOptions{WriteIndented=true}));
         }
     }

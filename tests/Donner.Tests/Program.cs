@@ -274,6 +274,15 @@ Test("更新检查按数字版本比较并忽略预发布",()=>
     Reject(()=>ReleaseUpdate.Parse(Release("v1.27-beta")));
     Check(newer.Page.AbsoluteUri=="https://github.com/topsai/donner-livejack-control-panel/releases/tag/v1.26","下载页越出项目");
 });
+Test("主页调音台输出跟随实际声卡总线且保持左右声道",()=>
+{
+    Check(MixerMeterRouting.UniqueBus(new[]{"耳机","我的音箱",""},name=>name=="我的音箱")==1,"错误读取了A1而非声卡所在A2");
+    Check(MixerMeterRouting.UniqueBus(new[]{"其他声卡","",""},name=>name=="我的音箱")==-1,"把其他声卡电平冒充当前设备");
+    Check(MixerMeterRouting.UniqueBus(new[]{"我的音箱","我的音箱",""},name=>name=="我的音箱")==-1,"多总线指向同设备时不能猜测混合峰值");
+    Check(MixerMeterRouting.OutputChannel(1,0)==8&&MixerMeterRouting.OutputChannel(1,1)==9,"左右通道或总线偏移错误");
+    MixerRules.Validate("Option.sr",44100);MixerRules.Validate("Command.Restart",1);
+    Reject(()=>MixerRules.Validate("Option.sr",45000));Reject(()=>MixerRules.Validate("Command.Restart",0));
+});
 Console.WriteLine($"热插拔结果：{passed} 通过，{failures} 失败");
 return failures==0?0:1;
 

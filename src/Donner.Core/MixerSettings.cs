@@ -43,6 +43,8 @@ public static class MixerRules
     }
     public static void Validate(string parameter,float value)
     {
+        if(parameter=="Option.sr"&&new float[]{44100,48000,88200,96000,176400,192000}.Contains(value))return;
+        if(parameter=="Command.Restart"&&value==1)return;
         if(!ranges.TryGetValue(parameter,out var r)||!float.IsFinite(value)||value<r.Min||value>r.Max||(r.Integer&&value!=MathF.Round(value)))
             throw new InvalidDataException("调音台参数或数值不受支持："+parameter);
     }

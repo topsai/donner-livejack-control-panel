@@ -57,15 +57,18 @@ internal sealed class LiveLevels : IDisposable
         public void Dispose(){Available=false;try {capture.StopRecording();}finally {try {capture.Dispose();}finally {device.Dispose();}}}
     }
     private Source? input,output;
+    private readonly bool captureInput,captureOutput;
     private long nextRetry=Environment.TickCount64+3000;
     public bool InputAvailable=>input?.Available==true;
     public bool OutputAvailable=>output?.Available==true;
+    internal bool CapturesOutput=>captureOutput;
     public int InputPackets=>input is {} source?Volatile.Read(ref source.Packets):0;
     public int OutputPackets=>output is {} source?Volatile.Read(ref source.Packets):0;
     public string? Error {get;private set;}
-    public LiveLevels()
+    public LiveLevels(bool captureInput=true,bool captureOutput=true)
     {
-        input=Open(DataFlow.Capture,false);output=Open(DataFlow.Render,true);
+        this.captureInput=captureInput;this.captureOutput=captureOutput;
+        if(captureInput)input=Open(DataFlow.Capture,false);if(captureOutput)output=Open(DataFlow.Render,true);
     }
     private Source? Open(DataFlow flow,bool loopback)
     {
@@ -77,12 +80,12 @@ internal sealed class LiveLevels : IDisposable
                 foreach(var endpoint in endpoints)
                 {
                     bool kept=false;
-                    try {if(endpoint.FriendlyName.Contains("Livejack",StringComparison.OrdinalIgnoreCase)){matches.Add(endpoint);kept=true;}}
+                    try {if(endpoint.DeviceFriendlyName.Contains("Livejack",StringComparison.OrdinalIgnoreCase)){matches.Add(endpoint);kept=true;}}
                     finally {if(!kept)endpoint.Dispose();}
                 }
                 if(matches.Count==1){var device=matches[0];matches.Clear();return new Source(device,loopback);}
             }
-            catch(Exception error) when(error is System.Runtime.InteropServices.COMException or InvalidOperationException or InvalidDataException or NotSupportedException)
+            catch(Exception error) when(error is System.Runtime.InteropServices.COMException or InvalidOperationException or UnauthorizedAccessException or InvalidDataException or NotSupportedException)
             {Error=error.Message;}
             finally {foreach(var endpoint in matches)endpoint.Dispose();}
             return null;
@@ -90,9 +93,9 @@ internal sealed class LiveLevels : IDisposable
     public void RetryStopped()
     {
         if(Environment.TickCount64<nextRetry)return;nextRetry=Environment.TickCount64+3000;
-        void Release(Source? source){try {source?.Dispose();}catch(Exception error) when(error is System.Runtime.InteropServices.COMException or InvalidOperationException) {}}
-        if(!InputAvailable){Release(input);input=Open(DataFlow.Capture,false);}
-        if(!OutputAvailable){Release(output);output=Open(DataFlow.Render,true);}
+        void Release(Source? source){try {source?.Dispose();}catch(Exception error) when(error is System.Runtime.InteropServices.COMException or InvalidOperationException or UnauthorizedAccessException) {}}
+        if(captureInput&&!InputAvailable){Release(input);input=Open(DataFlow.Capture,false);}
+        if(captureOutput&&!OutputAvailable){Release(output);output=Open(DataFlow.Render,true);}
     }
     public float[] Read()
     {

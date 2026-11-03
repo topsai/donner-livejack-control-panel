@@ -1,0 +1,7 @@
+# Mixer rates, custom endpoint names and home meters
+
+User explicitly requests: show/set Windows, Banana and hardware sample rates on mixer page; customize input/output endpoint names; fix home output meters after mixer starts. Windows and app names both affected per persistent preference.
+
+Design: distinguish Windows Livejack capture/render defaults from Banana preferred rate and actual Donner hardware rate. No changes on startup/poll. Explicit apply with readback, clear partial failure; Windows endpoint setting may require admin. Keep generic unsupported format errors visible, never report write-only metadata as confirmed engine change. Compact expandable settings on mixer. Endpoint rename uses stable ID, durable original descriptor backup and explicit save/restore. Home meters use exact per-channel Banana output bus when that bus targets Livejack, avoiding exclusive WASAPI loopback; never use another output's meter as Livejack. Use adapter identity rather than customized friendly names. Normal non-mixer mode retains original direct capture.
+
+Work: (1) sample-rate helper/control with tests and explicit writes, (2) custom endpoint UI/save/restore preserving IDs, (3) mixer channel meter integration with fake mapping regression, (4) integrate UI/native read-only smoke, review, docs, package/release. Protect working 44.1kHz config: only temporary write tests with immediate readback/restore, no user microphone repetition unless necessary.

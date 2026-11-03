@@ -34,21 +34,37 @@ A1–A3 的录音端点标为“监听总线录音”；额外播放通道标为
 
 更名备份位于 `%LOCALAPPDATA%\DonnerControlPanel\mixer-endpoint-names.json`，请保留，以便恢复。更新或重装 Banana 驱动可能重建设备，需要重新核对名称。
 
-### v1.25 调音台截图
+### 采样率、自定义名称与主页电平
+
+调音台顶部直接显示 Windows 录音、Windows 播放、Banana 首选和 Donner 实际采样率。展开“采样率设置”可逐项修改：
+
+- Windows 两项：修改 Livejack 录音/播放端点的默认格式，需要管理员授权，成功时检查 Windows 音频引擎的回读。
+- Banana 首选：点击“保存首选”，再按需点击“重启引擎”；首选值与声卡实际工作速率分开展示。
+- Donner 硬件：通过原厂 API 设置，使用驱动报告的支持列表，显示实际回读。被其他音频程序占用或未生效时报告失败。
+
+这些值不一定必须相同，但在本机卡拉 OK 连接方式下建议保持一致。改动可能短暂中断声音；采样率区加载和刷新只读取，不自动提交选择值。
+
+点击调音台右上角“设备名称”（或齿轮 → 应用设置 → 设备名称与用途），可编辑当前物理和虚拟播放/录音设备的名称，再点击“保存自定义名称”。名称同时用于 Windows 和本面板，保留设备 ID，原名备份可恢复。其他软件若仍使用旧名称，需要重新选择设备或重启刷新。
+
+Banana 接管 Livejack 输出时，主页从实际对应的 A1/A2/A3 总线读取左右声道电平，避免独占输出使 Windows 回环采集失效。不会将其他声卡的总线或某一通道的最大值冒充左右输出。未能唯一对应总线时不显示错误的替代读数；关闭调音台后恢复原来的 Windows 采集方式。电平不包含声卡的模拟直通监听。
+
+![调音台采样率设置](docs/images/mixer-rates.png)
+
+### v1.27 调音台截图
 
 以下截图来自已连接的 Banana，仅只读采集界面，未修改现有配置。
 
 输入混音：
 
-![v1.25 调音台输入混音](docs/images/mixer-inputs.png)
+![v1.27 调音台输入混音](docs/images/mixer-inputs.png)
 
 输出与 EQ：
 
-![v1.25 调音台输出与 EQ](docs/images/mixer-eq.png)
+![v1.27 调音台输出与 EQ](docs/images/mixer-eq.png)
 
 ## 下载与安装
 
-推荐在 [Releases](https://github.com/topsai/donner-livejack-control-panel/releases/latest) 下载 `DonnerControlPanel-v1.26-Setup-win-x64.exe`，双击安装。安装包自带 .NET 运行时和原厂 USB 音频驱动，无需联网或另外下载驱动。
+推荐在 [Releases](https://github.com/topsai/donner-livejack-control-panel/releases/latest) 下载 `DonnerControlPanel-v1.27-Setup-win-x64.exe`，双击安装。安装包自带 .NET 运行时和原厂 USB 音频驱动，无需联网或另外下载驱动。
 
 - 已有兼容的原厂驱动：自动跳过驱动安装。
 - 缺少兼容驱动：先打开内置的原厂驱动安装向导。允许 Windows 管理员授权并完成向导后，安装程序会检查驱动，再安装中文面板。
@@ -100,7 +116,7 @@ A1–A3 的录音端点标为“监听总线录音”；额外播放通道标为
 .\build-installer.ps1 -DriverInstaller 'C:\drivers\Donner_UsbAudio_v5.0.0_2021-03-29_setup.exe'
 ```
 
-脚本验证原厂签名与 SHA-256，输出 `dist\DonnerControlPanel-v1.26-Setup-win-x64.exe`。源码仓库不保存驱动二进制。安装包内驱动为原厂 5.0.0 版本（SHA-256：`12EF3F0F517B2F00A7EBBA3DBC0CAC978E4A71ECE8599B31FFE853304DD147F0`），保持原文件；安装过程交由原厂向导执行。
+脚本验证原厂签名与 SHA-256，输出 `dist\DonnerControlPanel-v1.27-Setup-win-x64.exe`。源码仓库不保存驱动二进制。安装包内驱动为原厂 5.0.0 版本（SHA-256：`12EF3F0F517B2F00A7EBBA3DBC0CAC978E4A71ECE8599B31FFE853304DD147F0`），保持原文件；安装过程交由原厂向导执行。
 
 安装脚本的简体中文语言文件来自 [Inno Setup 仓库](https://github.com/jrsoftware/issrc/blob/main/Files/Languages/ChineseSimplified.isl)，保留作者署名。
 
@@ -125,7 +141,7 @@ dotnet run --project tests/Donner.Tests -c Release
 | `src/Donner.Core` | 能力检查、音量映射、预设、设备状态与进程通信 |
 | `src/Donner.Host` | 隔离进程调用原厂控制 API，检测设备并读写设置 |
 | `src/Donner.Panel` | WPF 中文界面、托盘、自动启动与面板说明 |
-| `tests/Donner.Tests` | 68 项核心回归检查，无第三方测试框架 |
+| `tests/Donner.Tests` | 69 项核心回归检查，无第三方测试框架 |
 
 源码仓库与便携 ZIP 不包含原厂驱动；统一安装 EXE 包含未经修改的原厂驱动安装程序。品牌名称用于说明兼容设备；此项目非 Donner 官方产品。
 

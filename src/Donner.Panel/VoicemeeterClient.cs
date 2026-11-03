@@ -7,10 +7,10 @@ using Microsoft.Win32;
 
 namespace Donner.Panel;
 
-internal sealed record MixerDevice(int Type,string Name)
+internal sealed record MixerDevice(int Type,string Name,string Id="")
 {
     public string Driver=>Type switch {1=>"mme",3=>"wdm",4=>"ks",5=>"asio",_=>throw new InvalidDataException("设备驱动类型无效。")};
-    public override string ToString()=>Name.Length==0?"未选择":$"{Driver.ToUpperInvariant()} · {MixerNames.Display(Name)}";
+    public override string ToString()=>Name.Length==0?"未选择":$"{Driver.ToUpperInvariant()} · {(MixerEndpointNames.TryCustomDisplay(Name,Id)??MixerNames.Display(Name))}";
 }
 internal interface IMixerClient:IDisposable
 {
@@ -24,6 +24,7 @@ internal interface IMixerClient:IDisposable
     MixerDevice[] Devices(bool input);
     void SetDevice(bool input,int index,MixerDevice device);
     float Level(bool input,int index);
+    float ChannelLevel(bool input,int index,int channel)=>Level(input,index);
 }
 
 internal sealed class VoicemeeterClient:IMixerClient
@@ -102,7 +103,7 @@ internal sealed class VoicemeeterClient:IMixerClient
         for(int i=0;i<Math.Clamp(count,0,512);i++)
         {
             var name=new StringBuilder(512);var id=new StringBuilder(512);
-            if(Function<Describe>(prefix+"_GetDeviceDescW")(i,out int type,name,id)==0&&type is 1 or 3 or 4 or 5)devices.Add(new(type,name.ToString()));
+            if(Function<Describe>(prefix+"_GetDeviceDescW")(i,out int type,name,id)==0&&type is 1 or 3 or 4 or 5)devices.Add(new(type,name.ToString(),id.ToString()));
         }
         return devices.Distinct().ToArray();
     }
@@ -111,6 +112,14 @@ internal sealed class VoicemeeterClient:IMixerClient
         Require();if(index is <0 or >2||device.Type==5&&(input||index!=0))throw new InvalidDataException("该位置不支持 ASIO 设备。");
         if(!Devices(input).Contains(device))throw new IOException("所选音频设备已移除，请刷新设备列表。");
         Check(Function<WriteString>("SetParameterStringW")($"{(input?"Strip":"Bus")}[{index}].device.{device.Driver}",device.Name),"选择音频设备");
+    }
+    public float ChannelLevel(bool input,int index,int channel)
+    {
+        Require();
+        if(index is <0 or >4||channel<0||channel>=(input&&index<3?2:8))throw new InvalidDataException("电平声道无效。");
+        int native=input?MixerRules.InputLevelIndex(index)+channel:MixerMeterRouting.OutputChannel(index,channel);
+        Check(Function<ReadLevel>("GetLevel")(input?2:3,native,out var value),"读取声道电平");
+        return float.IsFinite(value)?Math.Clamp(value,0,1):throw new IOException("电平返回无效数值。");
     }
     public float Level(bool input,int index)
     {

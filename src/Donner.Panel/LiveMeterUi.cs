@@ -23,7 +23,7 @@ public partial class MainWindow
     {
         var previous=levels;levels=null;meterDevice=null;
         try {previous?.Dispose();}
-        catch(Exception error) when(error is System.Runtime.InteropServices.COMException or InvalidOperationException) { }
+        catch(Exception error) when(error is System.Runtime.InteropServices.COMException or InvalidOperationException or UnauthorizedAccessException) { }
         Array.Clear(displayedPeaks);
         foreach(var view in meterViews.Values)view.Visibility=Visibility.Hidden;
     }
@@ -33,22 +33,25 @@ public partial class MainWindow
         if(closed)return;
         var d=session.Snapshot;
         bool wanted=MeterCheck.IsChecked==true&&IsVisible&&WindowState!=WindowState.Minimized&&Pages.SelectedIndex==0&&d.Connected&&!d.Demo&&d.DeviceCount==1&&!meterSuspended;
-        if(!wanted){if(levels is not null)StopMeters();return;}
-        if(meterDevice!=d.DeviceId)
+        if(!wanted){if(levels is not null||meterDevice is not null)StopMeters();return;}
+        bool fromMixer=ReadMixerHomeOutput(out bool mixerAvailable,out float mixerLeft,out float mixerRight);
+        if(meterDevice!=d.DeviceId||meterMixerOutput!=fromMixer)
         {
             StopMeters();meterDevice=d.DeviceId;
-            try {levels=new();if(levels.Error is {} error)Record("实时电平读取："+error);}
-            catch(Exception error) when(error is System.Runtime.InteropServices.COMException or InvalidOperationException)
+            meterMixerOutput=fromMixer;
+            try {levels=new(captureOutput:!fromMixer);if(levels.Error is {} error)Record("实时电平读取："+error);}
+            catch(Exception error) when(error is System.Runtime.InteropServices.COMException or InvalidOperationException or UnauthorizedAccessException)
             {Record("实时电平读取："+error.Message);}
         }
-        if(levels is null)return;
-        levels.RetryStopped();
-        var peaks=levels.Read();
+        levels?.RetryStopped();
+        var peaks=levels?.Read()??new float[4];
+        if(fromMixer){peaks[2]=mixerLeft;peaks[3]=mixerRight;}
         foreach(var pair in meterViews)
         {
             var (direction,channel)=pair.Key;int index=(direction==1?0:2)+(int)channel-1;
             if(index is <0 or >3)continue;
-            var view=pair.Value;bool available=direction==1?levels.InputAvailable:levels.OutputAvailable;
+            var view=pair.Value;bool available=direction==1?levels?.InputAvailable==true:fromMixer?mixerAvailable:levels?.OutputAvailable==true;
+            if(direction==0)view.ToolTip=fromMixer?$"Banana A{mixerOutputBus+1} 送往 Livejack 的{(channel==1?"左":"右")}声道峰值（不包含硬件直通监听）":"电脑送往声卡的输出峰值（不包含硬件直通监听）";
             view.Visibility=available?Visibility.Visible:Visibility.Hidden;
             if(!available){displayedPeaks[index]=0;continue;}
             displayedPeaks[index]=Math.Max(peaks[index],displayedPeaks[index]*.65f);

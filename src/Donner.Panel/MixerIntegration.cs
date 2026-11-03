@@ -72,7 +72,7 @@ public partial class MainWindow
         try
         {
             client=new VoicemeeterClient();client.Start();
-            mixerPanel=new MixerPanel(client);client=null;MixerSlot.Content=mixerPanel;
+            mixerPanel=new MixerPanel(client,sampleRates:new MixerSampleRates(client,()=>session.Snapshot,async rate=>{if(busy)throw new IOException("正在执行其他设备操作，请稍后重试。");await FlushVolumes();selection.Clear();await Apply([new("rate",Value:checked((int)rate))]);}),editNames:()=>MixerNamesClick(this,new RoutedEventArgs()));client=null;MixerSlot.Content=mixerPanel;
             MixerSettingsStatus.Text="已启用。打开 Donner 面板时会连接并按需在后台启动 Banana；关闭此开关不会强制退出已运行的 Banana。";
         }
         catch(Exception error) when(error is InvalidDataException or IOException or System.ComponentModel.Win32Exception or BadImageFormatException or EntryPointNotFoundException)
@@ -98,7 +98,7 @@ public partial class MainWindow
         mixerPanel?.Dispose();mixerPanel=null;nextMixerStart=0;UpdateMixer();
     }
     private void MixerNamesClick(object sender,RoutedEventArgs e)
-    {try{MixerEndpointNames.Show(this,storage);}catch(Exception error) when(error is System.Runtime.InteropServices.COMException or IOException or InvalidDataException or UnauthorizedAccessException or System.Text.Json.JsonException){Record(error.Message);}}
+    {try{MixerEndpointNames.Show(this,storage);mixerPanel?.RefreshDevices();nextMixerMeterRoute=0;}catch(Exception error) when(error is System.Runtime.InteropServices.COMException or IOException or InvalidDataException or UnauthorizedAccessException or System.Text.Json.JsonException){Record(error.Message);}}
     private void MixerGuideClick(object sender,RoutedEventArgs e)
     {
         if(new MixerSetupWindow{Owner=this}.ShowDialog()!=true)return;
