@@ -1,0 +1,27 @@
+{
+  "Version": "1.34",
+  "CoreChecksPassed": 75,
+  "DefaultFirstTargetAndButtonHighlight": true,
+  "TargetDropdownRemoved": true,
+  "NativeBypassSpectrum": {
+    "Success": true,
+    "SyntheticChannelBypass": true,
+    "CallbackAllocatedBytes": 0,
+    "LiveFrames": 66048,
+    "SpectrumPeak": 0.0032332027,
+    "BypassMonitoring": true,
+    "SampleRate": 44100,
+    "InputChannels": 34,
+    "OutputChannels": 34,
+    "CallbackFault": 0,
+    "Released": true,
+    "FlatOnly": true
+  },
+  "UI": {
+    "Success": true,
+    "InputIsolation": true,
+    "InvalidInputRejected": true,
+    "CurveEdits": true,
+    "PersistedAndBypassed": true
+  }
+}

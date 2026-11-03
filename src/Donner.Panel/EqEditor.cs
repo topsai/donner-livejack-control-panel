@@ -27,6 +27,8 @@ internal sealed class EqEditor:Border,IDisposable
     private bool updating;
     private string? editError,readError;
     private int index,selected;
+    internal int SelectedTarget=>index;
+    internal event Action<int>? TargetChanged;
     internal EqEditor(IEqEditorSource source)
     {
         this.source=source;if(source.IsOutput)timer.Interval=TimeSpan.FromMilliseconds(500);MinWidth=0;MinHeight=480;Margin=new Thickness(0,16,0,0);Padding=new Thickness(14);CornerRadius=new CornerRadius(8);
@@ -38,7 +40,7 @@ internal sealed class EqEditor:Border,IDisposable
         foreach(var height in new[]{GridLength.Auto,new GridLength(260),GridLength.Auto,GridLength.Auto})body.RowDefinitions.Add(new(){Height=height});
         var header=new DockPanel{Margin=new Thickness(0,0,0,12)};body.Children.Add(header);
         var reset=new Button{Content="恢复平直",FontSize=12,Padding=new Thickness(10,6,10,6),Margin=new Thickness(12,0,0,0)};DockPanel.SetDock(reset,Dock.Right);header.Children.Add(reset);
-        var headerLeft=new WrapPanel();header.Children.Add(headerLeft);headerLeft.Children.Add(input);if(source.IsOutput){headerLeft.Children.Add(channel);headerLeft.Children.Add(linked);}headerLeft.Children.Add(enabled);
+        var headerLeft=new WrapPanel();header.Children.Add(headerLeft);if(source.IsOutput){headerLeft.Children.Add(input);headerLeft.Children.Add(channel);headerLeft.Children.Add(linked);}headerLeft.Children.Add(enabled);
         if(!source.IsOutput){headerLeft.Children.Add(new TextBlock{Text="输出增益",VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(20,0,8,0)});headerLeft.Children.Add(preamp);headerLeft.Children.Add(new TextBlock{Text="dB",VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(5,0,0,0)});}
         Grid.SetRow(Graph,1);body.Children.Add(Graph);
         var editor=new StackPanel{Margin=new Thickness(0,10,0,0)};Grid.SetRow(editor,2);body.Children.Add(editor);editor.Children.Add(bandButtons);
@@ -66,12 +68,12 @@ internal sealed class EqEditor:Border,IDisposable
         Graph.SelectionChanged=SelectBand;Graph.BandChanged=(band,value)=>{selected=band;ChangeBand(value);};
         timer.Tick+=(_,_)=>
         {
-            if(!IsVisible)return;source.Maintain();
+            bool visible=IsVisible&&Window.GetWindow(this)?.WindowState!=WindowState.Minimized;source.Monitor(visible,index);if(!visible)return;source.Maintain();
             Graph.SampleRate=source.SampleRate;source.Spectrum(index,samples);Graph.UpdateSpectrum(samples,source.HasAudio);
             if(source.IsOutput&&!Graph.IsMouseCaptureWithin&&!type.IsDropDownOpen&&!input.IsDropDownOpen&&!channel.IsDropDownOpen&&!new[]{frequency,gain,q,preamp}.Any(x=>x.IsKeyboardFocusWithin))RefreshFields();
             status.Text=editError??readError??source.Status;
         };
-        Loaded+=(_,_)=>timer.Start();Unloaded+=(_,_)=>timer.Stop();IsVisibleChanged+=(_,_)=>{if(IsVisible)timer.Start();else timer.Stop();};SelectInput(0);
+        Loaded+=(_,_)=>{source.Monitor(IsVisible,index);timer.Start();};Unloaded+=(_,_)=>{source.Monitor(false,index);timer.Stop();};IsVisibleChanged+=(_,_)=>{source.Monitor(IsVisible,index);if(IsVisible)timer.Start();else timer.Stop();};SelectInput(0);
     }
     private MicrophoneEqSettings Current=>source.Read(index,Math.Max(0,channel.SelectedIndex));
     private static TextBox Number(double width)=>new(){Width=width,Padding=new Thickness(5,4,5,4),FontSize=13,Foreground=Brushes.Black,Background=new SolidColorBrush(Color.FromRgb(232,236,242))};
@@ -82,7 +84,7 @@ internal sealed class EqEditor:Border,IDisposable
     }
     internal void SelectInput(int value)
     {
-        index=Math.Clamp(value,0,source.Targets.Length-1);updating=true;input.SelectedIndex=index;updating=false;RefreshFields();
+        index=Math.Clamp(value,0,source.Targets.Length-1);updating=true;input.SelectedIndex=index;updating=false;RefreshFields();source.Monitor(IsVisible,index);TargetChanged?.Invoke(index);
     }
     private void SelectBand(int value){selected=value;RefreshFields();}
     private void ChangeBand(EqBand value)
@@ -106,7 +108,7 @@ internal sealed class EqEditor:Border,IDisposable
         {status.Text=editError="请输入有效数字。";RefreshFields();return;}
         TryEdit(()=>{var config=Current;config.Bands[selected]=config.Bands[selected] with{Frequency=f,Gain=g,Q=quality};return config with{Preamp=output};});
     }
-    public void Dispose()=>timer.Stop();
+    public void Dispose(){source.Monitor(false,index);timer.Stop();}
     private void RefreshFields()
     {
         updating=true;try

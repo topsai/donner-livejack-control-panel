@@ -15,8 +15,8 @@ internal sealed class MicrophoneEqInsert:IDisposable
     private readonly MicrophoneEqProcessor processor=new();
     private readonly float[] ring=new float[4096];
     private readonly MicrophoneEqSettings[] settings=[MicrophoneEqSettings.Flat(),MicrophoneEqSettings.Flat(),MicrophoneEqSettings.Flat()];
-    private bool registered,disposed;
-    private int sampleRate=48000,preparedRate=48000,restart,preview,position;
+    private bool registered,disposed,monitoring;
+    private int sampleRate=48000,preparedRate=48000,restart,preview,position,ringTarget=-1;
     private long frames,lastFrames,lastActive,nextRestart,releaseAt,releaseDeadline;
     internal bool HasAudio=>registered&&Frames>0&&Environment.TickCount64-lastActive<1200;
     private int callbacks,callbackFault,inputChannels,outputChannels;
@@ -40,9 +40,15 @@ internal sealed class MicrophoneEqInsert:IDisposable
     internal void Configure(int strip,MicrophoneEqSettings value)
     {
         value.Validate();var old=settings[strip];settings[strip]=value with{Bands=(EqBand[])value.Bands.Clone()};Publish();
-        try{if(settings.Any(x=>x.Enabled)&&!registered)Start();else if(!settings.Any(x=>x.Enabled)&&registered){releaseAt=Frames+SampleRate/20;releaseDeadline=Environment.TickCount64+500;}}
+        try{if(settings.Any(x=>x.Enabled)&&!registered)Start();else if(!settings.Any(x=>x.Enabled)&&registered&&!monitoring){releaseAt=Frames+SampleRate/20;releaseDeadline=Environment.TickCount64+500;}}
         catch{settings[strip]=old;Publish();throw;}
-        Status=settings.Any(x=>x.Enabled)?"麦克风 EQ 已启用":"旁通 · 麦克风原声";
+        Status=settings.Any(x=>x.Enabled)?"麦克风 EQ 已启用":monitoring?"实时频谱 · EQ 旁通":"旁通 · 麦克风原声";
+    }
+    internal void Monitor(bool active,int target)
+    {
+        Preview=target;bool changed=monitoring!=active;monitoring=active;
+        if(active&&!registered)Start();
+        if(!active&&changed&&registered&&!settings.Any(x=>x.Enabled)){releaseAt=Frames+SampleRate/20;releaseDeadline=Environment.TickCount64+500;}
     }
     private void Publish(){preparedRate=SampleRate;processor.Publish(new(settings,preparedRate));}
     private void Start()
@@ -69,13 +75,14 @@ internal sealed class MicrophoneEqInsert:IDisposable
             nextRestart=Environment.TickCount64+1000;int result=stop();if(result==0)result=start();if(result==0)Interlocked.Exchange(ref restart,0);
             Status=result==0?"麦克风 EQ 已重新连接":$"麦克风 EQ 等待重连（{result}）";
         }
-        if(registered&&!settings.Any(x=>x.Enabled)&&(Frames>=releaseAt||Environment.TickCount64>=releaseDeadline)){Release();Status="旁通 · 麦克风原声";}
-        if(registered&&Frames!=lastFrames){lastFrames=Frames;lastActive=Environment.TickCount64;if(settings.Any(x=>x.Enabled))Status="麦克风 EQ 已启用";}
+        if(registered&&!monitoring&&!settings.Any(x=>x.Enabled)&&(Frames>=releaseAt||Environment.TickCount64>=releaseDeadline)){Release();Status="旁通 · 麦克风原声";}
+        if(registered&&Frames!=lastFrames){lastFrames=Frames;lastActive=Environment.TickCount64;Status=settings.Any(x=>x.Enabled)?"麦克风 EQ 已启用":monitoring?"实时频谱 · EQ 旁通":"旁通 · 麦克风原声";}
         else if(registered&&!HasAudio)Status="等待 Banana 音频缓冲，恢复后将自动重连。";
         if(CallbackFault!=0)Status="麦克风 EQ 回调异常，请关闭后重新启用。";
     }
     internal void CopySpectrum(Span<float> target)
     {
+        if(Volatile.Read(ref ringTarget)!=Preview){target.Clear();return;}
         int end=Volatile.Read(ref position);
         for(int i=0;i<target.Length;i++)target[i]=ring[(end-target.Length+i)&4095];
     }
@@ -101,7 +108,8 @@ internal sealed class MicrophoneEqInsert:IDisposable
             if(channel>=inputs||reads[channel]==null){output.Clear();continue;}
             new ReadOnlySpan<float>(reads[channel],count).CopyTo(output);
         }
-        int first=Volatile.Read(ref preview)*2;
+        int target=Volatile.Read(ref preview);if(ringTarget!=target){Array.Clear(ring);position=0;Volatile.Write(ref ringTarget,target);}
+        int first=target*2;
         if(first+1<inputs&&reads[first]!=null&&reads[first+1]!=null)
         {
             float* left=reads[first];float* right=reads[first+1];double energyL=0,energyR=0;

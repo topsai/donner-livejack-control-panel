@@ -9,7 +9,8 @@ internal sealed class MicrophoneEqRack:IDisposable,IEqEditorSource
     private readonly string? path;
     private readonly MicrophoneEqSettings[] settings=[MicrophoneEqSettings.Flat(),MicrophoneEqSettings.Flat(),MicrophoneEqSettings.Flat()];
     private MicrophoneEqInsert? insert;
-    private string? error;
+    private string? error,monitorError;
+    private long nextMonitorAttempt;
     private readonly System.Windows.Threading.DispatcherTimer saveTimer=new(){Interval=TimeSpan.FromMilliseconds(300)};
     private bool dirty;
     internal MicrophoneEqSettings Get(int index)=>settings[index] with{Bands=(EqBand[])settings[index].Bands.Clone()};
@@ -17,7 +18,7 @@ internal sealed class MicrophoneEqRack:IDisposable,IEqEditorSource
     internal bool Running=>insert?.Registered==true;
     internal bool HasAudio=>insert?.HasAudio==true;
     internal long Frames=>insert?.Frames??0;
-    internal string Status=>error??insert?.Status??"旁通 · 未启用麦克风 EQ";
+    internal string Status=>error??monitorError??insert?.Status??"旁通 · 未启用麦克风 EQ";
     internal MicrophoneEqRack(VoicemeeterClient? client,string? path)
     {
         this.client=client;this.path=path;saveTimer.Tick+=(_,_)=>Save();
@@ -74,6 +75,17 @@ internal sealed class MicrophoneEqRack:IDisposable,IEqEditorSource
     {
         if(insert is null){target.Clear();return;}insert.Preview=index;insert.CopySpectrum(target);
     }
+    public void Monitor(bool active,int target)
+    {
+        if(client is null)return;
+        if(active&&(!client.Connected||Environment.TickCount64<nextMonitorAttempt))return;
+        try
+        {
+            if(active)insert??=client.InputEq;
+            insert?.Monitor(active,target);monitorError=null;
+        }
+        catch(Exception e) when(e is IOException or InvalidDataException){monitorError=e.Message;nextMonitorAttempt=Environment.TickCount64+2000;}
+    }
     public bool IsOutput=>false;
     public string[] Targets=>["硬件输入 1","硬件输入 2","硬件输入 3"];
     int IEqEditorSource.SampleRate=>SampleRate;
@@ -83,5 +95,5 @@ internal sealed class MicrophoneEqRack:IDisposable,IEqEditorSource
     MicrophoneEqSettings IEqEditorSource.Read(int target,int channel)=>Get(target);
     void IEqEditorSource.Apply(int target,int channel,bool linked,MicrophoneEqSettings value)=>Set(target,value);
     void IEqEditorSource.Spectrum(int target,Span<float> values)=>Spectrum(target,values);
-    public void Dispose(){Save();saveTimer.Stop();}
+    public void Dispose(){Monitor(false,0);Save();saveTimer.Stop();}
 }

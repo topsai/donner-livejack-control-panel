@@ -28,9 +28,12 @@ internal static class MicrophoneEqChecks
             if(allocated!=0)throw new IOException($"回调路径存在逐帧分配：{allocated}");synthetic=true;
         }
         finally{foreach(var ptr in channels)Marshal.FreeHGlobal(ptr);Marshal.FreeHGlobal(buffer);}
-        long initial=engine.Frames;engine.Configure(0,MicrophoneEqSettings.Flat() with{Enabled=true});
-        try{await Task.Delay(1500);engine.Maintain();if(engine.InputChannels<6||engine.OutputChannels<6)throw new IOException("实际麦克风插入声道数量不足。");if(engine.Frames<=initial)throw new IOException("Banana 输入插入未返回实际音频缓冲。");}
-        finally{engine.Dispose();}
-        File.WriteAllText(report,JsonSerializer.Serialize(new{Success=true,SyntheticChannelBypass=synthetic,CallbackAllocatedBytes=allocated,LiveFrames=engine.Frames-initial,engine.SampleRate,engine.InputChannels,engine.OutputChannels,engine.CallbackFault,Released=!engine.Registered,FlatOnly=true},new JsonSerializerOptions{WriteIndented=true}));
+        long initial=engine.Frames;engine.Monitor(true,0);
+        float peak=0;long liveFrames=0;
+        try{await Task.Delay(1500);engine.Maintain();var spectrum=new float[2048];engine.CopySpectrum(spectrum);peak=spectrum.Max(x=>Math.Abs(x));liveFrames=engine.Frames-initial;
+            var graph=new EqGraph{Width=900,Height=300,SampleRate=engine.SampleRate};graph.UpdateSpectrum(spectrum,engine.HasAudio);graph.Measure(new System.Windows.Size(900,300));graph.Arrange(new System.Windows.Rect(0,0,900,300));graph.UpdateLayout();
+            var image=new System.Windows.Media.Imaging.RenderTargetBitmap(900,300,96,96,System.Windows.Media.PixelFormats.Pbgra32);image.Render(graph);var encoder=new System.Windows.Media.Imaging.PngBitmapEncoder();encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(image));using(var file=File.Create(report+".png"))encoder.Save(file);if(engine.InputChannels<6||engine.OutputChannels<6)throw new IOException("实际麦克风插入声道数量不足。");if(engine.Frames<=initial)throw new IOException("Banana 输入插入未返回实际音频缓冲。");}
+        finally{engine.Monitor(false,0);await Task.Delay(600);engine.Maintain();engine.Dispose();}
+        File.WriteAllText(report,JsonSerializer.Serialize(new{Success=true,SyntheticChannelBypass=synthetic,CallbackAllocatedBytes=allocated,LiveFrames=liveFrames,SpectrumPeak=peak,BypassMonitoring=true,engine.SampleRate,engine.InputChannels,engine.OutputChannels,engine.CallbackFault,Released=!engine.Registered,FlatOnly=true},new JsonSerializerOptions{WriteIndented=true}));
     }
 }

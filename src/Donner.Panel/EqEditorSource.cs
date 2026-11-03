@@ -8,6 +8,7 @@ internal interface IEqEditorSource
     string Status {get;}
     bool HasAudio {get;}
     void Maintain();
+    void Monitor(bool active,int target){}
     MicrophoneEqSettings Read(int target,int channel);
     void Apply(int target,int channel,bool linked,MicrophoneEqSettings settings);
     void Spectrum(int target,Span<float> values);

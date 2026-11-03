@@ -116,6 +116,12 @@ public partial class MainWindow
         fader.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(System.Windows.Input.Mouse.PrimaryDevice,Environment.TickCount,System.Windows.Input.MouseButton.Left){RoutedEvent=Control.PreviewMouseDoubleClickEvent});panel.Poll(true);
         if(fader.Value!=0||fake.Values.GetValueOrDefault("Strip[0].Gain")!=0)throw new Exception("双击推子未精确归零。");
         fader.Value=.1;panel.Poll(true);if(Math.Abs(fake.Values.GetValueOrDefault("Strip[0].Gain")-.1f)>.001)throw new Exception("零点吸附破坏了非鼠标微调。");
+        var micButtons=Visuals<Button>(panel).Where(x=>x.Tag?.ToString()?.StartsWith("MicrophoneEq.")==true).ToArray();
+        var inputEq=Visuals<EqEditor>(panel).Single();
+        if(inputEq.SelectedTarget!=0||((SolidColorBrush)micButtons[0].Background).Color==((SolidColorBrush)micButtons[1].Background).Color)throw new Exception("默认麦克风EQ未高亮第一个输入。");
+        micButtons[1].RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        if(inputEq.SelectedTarget!=1||((SolidColorBrush)micButtons[1].Background).Color==((SolidColorBrush)micButtons[0].Background).Color)throw new Exception("按钮选择未同步目标与高亮。");
+        if(Visuals<ComboBox>(inputEq).Any(x=>x.Items.Count==3&&x.Items[0]?.ToString()=="硬件输入 1"))throw new Exception("麦克风输入下拉框仍显示。");
         int windowCount=System.Windows.Application.Current.Windows.Count;
         Visuals<Button>(panel).First(x=>x.Content?.ToString()=="麦克风 EQ").RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         if(System.Windows.Application.Current.Windows.Count!=windowCount||Visuals<EqEditor>(panel).Count()!=1)throw new Exception("麦克风EQ未保持页面内编辑。");
