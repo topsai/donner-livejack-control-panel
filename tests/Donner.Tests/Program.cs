@@ -1,4 +1,4 @@
-using Donner.Core;
+﻿using Donner.Core;
 using System.Text.Json;
 using System.Diagnostics;
 
@@ -289,6 +289,61 @@ Test("调音台推子可吸附归零且保留键盘微调",()=>
     Check(MixerFaderValue.Pointer(-12.36)==-12.4&&MixerFaderValue.Pointer(3.26)==3.3,"拖动未按0.1dB量化");
     Check(MixerFaderValue.Pointer(-100)==-60&&MixerFaderValue.Pointer(100)==12,"推子越界");
     Reject(()=>MixerFaderValue.Pointer(double.NaN));
+});
+Test("麦克风EQ中心增益与截止斜率正确",()=>
+{
+    var peak=EqCoefficients.Create(new(EqFilter.Bell,1000,6,1),48000);
+    Check(Math.Abs(peak.Decibels(1000,48000)-6)<.01,"Bell中心增益不是6dB");
+    var cut=EqCoefficients.Create(new(EqFilter.HighPass,100,0,.70710678),48000);
+    Check(Math.Abs(cut.Decibels(100,48000)+3.0103)<.02,"低切截止点错误");
+    Check(cut.Decibels(10,48000)<-39&&Math.Abs(cut.Decibels(1000,48000))<.01,"低切频响错误");
+    var notch=EqCoefficients.Create(new(EqFilter.Notch,1000,0,4),44100);
+    Check(notch.Decibels(1000,44100)<-100,"陷波未衰减中心频率");
+});
+Test("独立麦克风EQ不处理其他输入并保持立体声隔离",()=>
+{
+    var configs=new[]{MicrophoneEqSettings.Flat(),MicrophoneEqSettings.Flat(),MicrophoneEqSettings.Flat()};
+    configs[1]=configs[1] with{Enabled=true,Preamp=6};
+    var dsp=new MicrophoneEqProcessor();dsp.Publish(new(configs,48000));dsp.BeginBlock(48000);
+    var signal=Enumerable.Range(0,2048).Select(i=>(float)(.1*Math.Sin(2*Math.PI*1000*i/48000))).ToArray();var result=new float[2048];
+    dsp.ProcessChannel(0,signal,result);Check(signal.SequenceEqual(result),"其他麦克风被处理");
+    dsp.ProcessChannel(6,signal,result);Check(signal.SequenceEqual(result),"伴奏被处理");
+    dsp.ProcessChannel(2,signal,result);Check(Math.Abs(result[1800]/signal[1800]-1.995262)<.001,"所选麦克风增益错误");
+    Array.Clear(result);dsp.ProcessChannel(3,new float[2048],result);Check(result.All(x=>x==0),"左右声道串音");
+    dsp.BeginBlock(44100);dsp.ProcessChannel(2,signal,result);Check(signal.SequenceEqual(result),"采样率不匹配时没有旁通");
+    configs[1]=configs[1] with{Enabled=false};dsp.Publish(new(configs,44100));dsp.BeginBlock(44100);dsp.ProcessChannel(2,signal,result);Check(Math.Abs(result[^1]-signal[^1])<1e-7,"关闭EQ后未恢复原声");
+});
+Test("麦克风EQ拒绝损坏设置且音频处理无逐帧分配",()=>
+{
+    var config=MicrophoneEqSettings.Flat();Reject(()=>(config with{Preamp=double.NaN}).Validate());
+    var bad=(EqBand[])config.Bands.Clone();bad[0]=bad[0] with{Q=0};Reject(()=>(config with{Bands=bad}).Validate());
+    var dsp=new MicrophoneEqProcessor();dsp.Publish(new(new[]{config with{Enabled=true},config,config},48000));dsp.BeginBlock(48000);
+    var input=new float[512];var output=new float[512];for(int i=0;i<100;i++)dsp.ProcessChannel(0,input,output);
+    long before=GC.GetAllocatedBytesForCurrentThread();for(int i=0;i<100;i++){dsp.BeginBlock(48000);dsp.ProcessChannel(0,input,output);}
+    Check(GC.GetAllocatedBytesForCurrentThread()==before,"回调DSP路径产生了托管分配");
+});
+Test("快速连续改动麦克风EQ时保持淡化连续",()=>
+{
+    var config=MicrophoneEqSettings.Flat() with{Enabled=true};var settings=new[]{config,MicrophoneEqSettings.Flat(),MicrophoneEqSettings.Flat()};
+    var dsp=new MicrophoneEqProcessor();var input=Enumerable.Repeat(.1f,480).ToArray();var output=new float[480];
+    dsp.Publish(new(settings,48000));dsp.BeginBlock(48000);dsp.ProcessChannel(0,input,output);
+    settings[0]=config with{Preamp=12};dsp.Publish(new(settings,48000));dsp.BeginBlock(48000);dsp.ProcessChannel(0,input.AsSpan(0,48),output);
+    float last=output[47];settings[0]=config with{Preamp=-12};dsp.Publish(new(settings,48000));dsp.BeginBlock(48000);dsp.ProcessChannel(0,input.AsSpan(0,48),output);
+    Check(Math.Abs(output[0]-last)<.002,"快速更改参数造成单采样跳变");
+});
+Test("修改一个麦克风EQ不重置其他麦克风滤波状态",()=>
+{
+    var first=MicrophoneEqSettings.Flat();var second=MicrophoneEqSettings.Flat() with{Enabled=true};second.Bands[0]=new(EqFilter.Bell,100,24,20);
+    var settings=new[]{first,second,MicrophoneEqSettings.Flat()};var actual=new MicrophoneEqProcessor();var reference=new MicrophoneEqProcessor();actual.Publish(new(settings,48000));reference.Publish(new(settings,48000));
+    var signal=new float[512];var a=new float[512];var b=new float[512];
+    for(int block=0;block<100;block++)
+    {
+        for(int i=0;i<512;i++)signal[i]=(float)(.01*Math.Sin(2*Math.PI*100*(block*512+i)/48000));
+        actual.BeginBlock(48000);reference.BeginBlock(48000);actual.ProcessChannel(2,signal,a);reference.ProcessChannel(2,signal,b);
+    }
+    settings[0]=first with{Preamp=1};actual.Publish(new(settings,48000));
+    actual.BeginBlock(48000);reference.BeginBlock(48000);actual.ProcessChannel(2,signal,a);reference.ProcessChannel(2,signal,b);
+    Check(a.Zip(b,(x,y)=>Math.Abs(x-y)).Max()<.000001,"更改输入1扰动了输入2滤波器");
 });
 Console.WriteLine($"热插拔结果：{passed} 通过，{failures} 失败");
 return failures==0?0:1;

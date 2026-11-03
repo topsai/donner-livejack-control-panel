@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -40,6 +40,9 @@ internal sealed class VoicemeeterClient:IMixerClient
     [UnmanagedFunctionPointer(CallingConvention.StdCall,CharSet=CharSet.Unicode)] private delegate int Describe(int index,out int type,StringBuilder name,StringBuilder id);
     [DllImport("kernel32.dll",CharSet=CharSet.Unicode,SetLastError=true)] private static extern IntPtr LoadLibraryExW(string path,IntPtr reserved,uint flags);
     private IntPtr library;
+    private MicrophoneEqInsert? inputEq;
+    private static readonly List<VoicemeeterClient> retainedForNativeCallbacks=[];
+    internal MicrophoneEqInsert InputEq=>inputEq??=new(library);
     private bool loggedIn;
     private bool? pendingWindow;
     private T Function<T>(string name) where T:Delegate=>Marshal.GetDelegateForFunctionPointer<T>(NativeLibrary.GetExport(library,"VBVMR_"+name));
@@ -130,6 +133,8 @@ internal sealed class VoicemeeterClient:IMixerClient
     }
     public void Dispose()
     {
+        try{inputEq?.Dispose();inputEq=null;}
+        catch(IOException){Connected=false;retainedForNativeCallbacks.Add(this);return;}
         Connected=false;if(library==IntPtr.Zero)return;
         try{if(loggedIn)Function<Empty>("Logout")();}finally{loggedIn=false;NativeLibrary.Free(library);library=IntPtr.Zero;}
     }

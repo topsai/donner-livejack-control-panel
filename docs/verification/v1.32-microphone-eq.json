@@ -1,0 +1,24 @@
+{
+  "CoreChecksPassed": 75,
+  "Native": {
+    "Success": true,
+    "SyntheticChannelBypass": true,
+    "CallbackAllocatedBytes": 0,
+    "LiveFrames": 66560,
+    "SampleRate": 44100,
+    "InputChannels": 34,
+    "OutputChannels": 34,
+    "CallbackFault": 0,
+    "Released": true,
+    "FlatOnly": true
+  },
+  "UI": {
+    "Success": true,
+    "InputIsolation": true,
+    "InvalidInputRejected": true,
+    "CurveEdits": true,
+    "PersistedAndBypassed": true
+  },
+  "RealAudioValidation": "Flat insert only; routing and non-flat gains unchanged",
+  "CodeReview": "No outstanding required corrections"
+}

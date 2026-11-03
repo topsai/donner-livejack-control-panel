@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
 using Donner.Core;
@@ -72,7 +72,7 @@ public partial class MainWindow
         try
         {
             client=new VoicemeeterClient();client.Start();
-            mixerPanel=new MixerPanel(client,sampleRates:new MixerSampleRates(client,()=>session.Snapshot,async rate=>{if(busy)throw new IOException("正在执行其他设备操作，请稍后重试。");await FlushVolumes();selection.Clear();await Apply([new("rate",Value:checked((int)rate))]);}),editNames:()=>MixerNamesClick(this,new RoutedEventArgs()));client=null;MixerSlot.Content=mixerPanel;
+            mixerPanel=new MixerPanel(client,sampleRates:new MixerSampleRates(client,()=>session.Snapshot,async rate=>{if(busy)throw new IOException("正在执行其他设备操作，请稍后重试。");await FlushVolumes();selection.Clear();await Apply([new("rate",Value:checked((int)rate))]);}),editNames:()=>MixerNamesClick(this,new RoutedEventArgs()),eqStorage:storage);client=null;MixerSlot.Content=mixerPanel;
             MixerSettingsStatus.Text="已启用。打开 Donner 面板时会连接并按需在后台启动 Banana；关闭此开关不会强制退出已运行的 Banana。";
         }
         catch(Exception error) when(error is InvalidDataException or IOException or System.ComponentModel.Win32Exception or BadImageFormatException or EntryPointNotFoundException)

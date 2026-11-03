@@ -62,6 +62,7 @@ public partial class MainWindow
         try{if(waitingForOldMeter.IsCompleted)throw new Exception("已离开主页的旧采集任务逃过设备写入等待。");}
         finally{cleanupGate.TrySetResult();}
         await waitingForOldMeter;
+        await VerifyMicrophoneEqUi();
         var customChecks=MixerEndpointNamesSmoke.Verify();await MixerSampleRatesSmoke.VerifyAsync();await MixerHomeMetersSmoke.VerifyAsync();await BackgroundMeterSourceSmoke.VerifyAsync();
         File.WriteAllText(Path.Combine(smokeDirectory!,"mixer-extended-checks.json"),JsonSerializer.Serialize(new{Success=true,CustomNames=customChecks,SampleRates=true}));
         var nameDialogClock=System.Diagnostics.Stopwatch.StartNew();

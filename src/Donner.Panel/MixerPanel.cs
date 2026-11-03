@@ -10,6 +10,7 @@ namespace Donner.Panel;
 internal sealed class MixerPanel:Border,IDisposable
 {
     private readonly IMixerClient client;
+    private readonly MicrophoneEqRack microphoneEq;
     private readonly IDisposable? settings;
     private readonly TextBlock status=new(){FontSize=12,VerticalAlignment=VerticalAlignment.Center};
     private readonly StackPanel controls=new();
@@ -31,9 +32,9 @@ internal sealed class MixerPanel:Border,IDisposable
     internal int PendingCount=>pending.Count;
     internal bool ControlsEnabled=>controls.IsEnabled;
     internal static string BusName(int i)=>i switch{0=>"A1 监听",1=>"A2 输出",2=>"A3 输出",3=>"B1 直播",_=>"B2 直播"};
-    public MixerPanel(IMixerClient client,bool automaticPolling=true,FrameworkElement? sampleRates=null,Action? editNames=null)
+    public MixerPanel(IMixerClient client,bool automaticPolling=true,FrameworkElement? sampleRates=null,Action? editNames=null,string? eqStorage=null)
     {
-        this.client=client;Background=new SolidColorBrush(Color.FromRgb(248,250,251));BorderBrush=new SolidColorBrush(Color.FromRgb(227,233,237));
+        this.client=client;microphoneEq=new(client as VoicemeeterClient,eqStorage is null?null:Path.Combine(eqStorage,"microphone-eq.json"));Background=new SolidColorBrush(Color.FromRgb(248,250,251));BorderBrush=new SolidColorBrush(Color.FromRgb(227,233,237));
         BorderThickness=new Thickness(1);CornerRadius=new CornerRadius(8);Padding=new Thickness(14);Margin=new Thickness(0);
         var body=new StackPanel();Child=body;var heading=new DockPanel();body.Children.Add(heading);
         var open=new Button{Content="打开原界面",FontSize=12,Padding=new Thickness(10,6,10,6),Margin=new Thickness(10,0,0,0)};DockPanel.SetDock(open,Dock.Right);heading.Children.Add(open);
@@ -118,6 +119,7 @@ internal sealed class MixerPanel:Border,IDisposable
         {
             var routes=new WrapPanel{HorizontalAlignment=HorizontalAlignment.Center,Margin=new Thickness(0,7,0,5)};box.Children.Add(routes);
             foreach(var route in MixerRules.Routes)AddCheck(routes,route,prefix+"."+route);
+            if(index<3){var micEq=new Button{Content="麦克风 EQ",FontSize=11,Padding=new Thickness(8,4,8,4),Margin=new Thickness(0,5,0,3)};box.Children.Add(micEq);micEq.Click+=(_,_)=>microphoneEq.Show(Window.GetWindow(this),index);}
             if(index<3){AddNumber(box,"压缩",prefix+".Comp",0,10,.1f);AddNumber(box,"噪声门",prefix+".Gate",0,10,.1f);}
             else for(int band=1;band<=3;band++)AddNumber(box,new[]{"低频","中频","高频"}[band-1],prefix+$".EQGain{band}",-12,12,.1f);
         }
@@ -197,6 +199,7 @@ internal sealed class MixerPanel:Border,IDisposable
     internal void Poll(bool force=false)
     {
         if(disposed)return;
+        microphoneEq.Maintain();
         Attempt(()=>
         {
             long now=Environment.TickCount64;
@@ -222,5 +225,5 @@ internal sealed class MixerPanel:Border,IDisposable
     }
     private void Attempt(Action action)
     {try{action();}catch(Exception e) when(e is InvalidDataException or IOException or InvalidOperationException or System.ComponentModel.Win32Exception){status.Text=e.Message;pending.Clear();awaiting.Clear();controls.IsEnabled=false;wasConnected=false;}}
-    public void Dispose(){if(disposed)return;disposed=true;timer.Stop();settings?.Dispose();pending.Clear();awaiting.Clear();client.Dispose();}
+    public void Dispose(){if(disposed)return;disposed=true;timer.Stop();microphoneEq.Dispose();settings?.Dispose();pending.Clear();awaiting.Clear();client.Dispose();}
 }
