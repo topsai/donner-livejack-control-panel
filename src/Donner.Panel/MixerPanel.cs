@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -7,7 +7,7 @@ using Donner.Core;
 
 namespace Donner.Panel;
 
-internal sealed class MixerPanel:Border,IDisposable
+internal sealed partial class MixerPanel:Border,IDisposable
 {
     private readonly IMixerClient client;
     private readonly MicrophoneEqRack microphoneEq;
@@ -33,11 +33,11 @@ internal sealed class MixerPanel:Border,IDisposable
     internal int PendingCount=>pending.Count;
     internal bool ControlsEnabled=>controls.IsEnabled;
     internal static string BusName(int i)=>i switch{0=>"A1 监听",1=>"A2 输出",2=>"A3 输出",3=>"B1 直播",_=>"B2 直播"};
-    public MixerPanel(IMixerClient client,bool automaticPolling=true,FrameworkElement? sampleRates=null,Action? editNames=null,string? eqStorage=null)
+    public MixerPanel(IMixerClient client,bool automaticPolling=true,FrameworkElement? sampleRates=null,Action? editNames=null,string? eqStorage=null,Func<bool>? enabledPreference=null)
     {
-        this.client=client;microphoneEq=new(client as VoicemeeterClient,eqStorage is null?null:Path.Combine(eqStorage,"microphone-eq.json"));
-        inputEditor=new(microphoneEq,SelectedInputDevice);inputEditor.TargetChanged+=UpdateMicrophoneSelection;microphoneEq.Changed+=UpdateMicrophoneEqDot;
-        var outputSource=new OutputEqSource(key=>pending.TryGetValue(key,out var value)?value:ReadValue(key),Queue,()=>{try{return (int)client.Get("Option.sr") is var rate&&rate>=8000?rate:48000;}catch(IOException){return 48000;}});
+        this.client=client;microphoneEq=new(client as VoicemeeterClient,eqStorage is null||File.Exists(Path.Combine(eqStorage,"mixer-session.json"))||File.Exists(Path.Combine(eqStorage,"mixer-session.json.bak"))?null:Path.Combine(eqStorage,"microphone-eq.json"),false);
+        inputEditor=new(microphoneEq,SelectedInputDevice);inputEditor.TargetChanged+=UpdateMicrophoneSelection;microphoneEq.Changed+=UpdateMicrophoneEqDot;microphoneEq.Changed+=_=>MarkSessionDirty();
+        var outputSource=new OutputEqSource(key=>pending.TryGetValue(key,out var value)?value:ReadValue(key),Queue,()=>{try{return (int)client.Get("Option.sr") is var rate&&rate>=8000?rate:48000;}catch(IOException){return 48000;}},client as VoicemeeterClient);
         outputEditor=new(outputSource,SelectedOutputDevice);outputEditor.TargetChanged+=UpdateOutputSelection;outputSource.EnabledChanged+=UpdateOutputEqDot;
         Background=new SolidColorBrush(Color.FromRgb(248,250,251));BorderBrush=new SolidColorBrush(Color.FromRgb(227,233,237));
         BorderThickness=new Thickness(1);CornerRadius=new CornerRadius(8);Padding=new Thickness(14);Margin=new Thickness(0);
@@ -62,6 +62,7 @@ internal sealed class MixerPanel:Border,IDisposable
         if(sampleRates is not null){body.Children.Add(sampleRates);settings=sampleRates as IDisposable;}
         body.Children.Add(controls);
         var tabs=new TabControl{Background=Brushes.Transparent,BorderThickness=new Thickness(0),Margin=new Thickness(0,8,0,0),Tag=connection,Template=(ControlTemplate)FindResource("MixerTabsTemplate")};controls.Children.Add(tabs);
+        mixerTabs=tabs;tabs.SelectionChanged+=(_,e)=>{if(ReferenceEquals(e.Source,tabs))MarkSessionDirty();};inputEditor.ViewChanged+=MarkSessionDirty;outputEditor.ViewChanged+=MarkSessionDirty;
         var inputs=new System.Windows.Controls.Primitives.UniformGrid{Rows=1};var outputs=new System.Windows.Controls.Primitives.UniformGrid{Rows=1};
         var inputBody=new StackPanel();inputBody.Children.Add(inputs);inputBody.Children.Add(inputEditor);
         tabs.Items.Add(new TabItem{Header="输入混音",Content=inputBody,FontSize=13,Padding=new Thickness(12,6,12,6)});
@@ -70,6 +71,7 @@ internal sealed class MixerPanel:Border,IDisposable
         for(int i=0;i<5;i++){BuildStrip(inputs,true,i);BuildStrip(outputs,false,i);}
         outputBody.Children.Add(outputEditor);
         body.Children.Add(new TextBlock{Text="电脑或伴奏软件选择“电脑声音 → 调音台 (VAIO)”或“伴奏 / 第二路声音 → 调音台 (AUX)”；直播软件选择“直播混音 1 (B1)”或“直播混音 2 (B2)”。未更名时对应 Voicemeeter Input / AUX Input、Out B1 / B2。",FontSize=12,Foreground=new SolidColorBrush(Color.FromRgb(91,114,125)),Margin=new Thickness(0,10,0,0)});
+        InitializePersistence(eqStorage,enabledPreference);
         timer.Tick+=(_,_)=>Poll();if(automaticPolling)timer.Start();Poll(true);
     }
     private void BuildStrip(System.Windows.Controls.Panel parent,bool input,int index)
@@ -80,7 +82,7 @@ internal sealed class MixerPanel:Border,IDisposable
         if(index<3)
         {
             var combo=new ComboBox{MinWidth=0,Height=29,FontSize=11,Margin=new Thickness(0,6,0,4),ToolTip="选择音频设备；更改会重新连接音频引擎。"};box.Children.Add(combo);devices.Add((combo,input,index));
-            combo.SelectionChanged+=(_,_)=>{if(!updating&&combo.SelectedItem is MixerDevice choice)Attempt(()=>client.SetDevice(input,index,choice));if(input)inputEditor.RefreshTargetInfo();else outputEditor.RefreshTargetInfo();};
+            combo.SelectionChanged+=(_,_)=>{if(!updating&&combo.SelectedItem is MixerDevice choice){Attempt(()=>client.SetDevice(input,index,choice));DeviceChoiceChanged(input,index);}if(input)inputEditor.RefreshTargetInfo();else outputEditor.RefreshTargetInfo();};
         }
         else box.Children.Add(new TextBlock{Text=input?"虚拟播放输入":"虚拟录音输出",FontSize=11,HorizontalAlignment=HorizontalAlignment.Center,Margin=new Thickness(0,10,0,8)});
         var faderRow=new Grid{Height=94};faderRow.ColumnDefinitions.Add(new());faderRow.ColumnDefinitions.Add(new(){Width=new GridLength(14)});box.Children.Add(faderRow);
@@ -199,7 +201,7 @@ internal sealed class MixerPanel:Border,IDisposable
         readers.Add(()=>{if(!number.IsKeyboardFocusWithin&&!pending.ContainsKey(key))number.Text=ReadValue(key).ToString("0.0",CultureInfo.CurrentCulture);});
     }
     internal void Queue(string key,float value)
-    {try{if(!client.Connected)throw new IOException("Banana 未连接，未应用更改。");MixerRules.Validate(key,value);pending[key]=value;}catch(Exception e) when(e is InvalidDataException or IOException){status.Text=e.Message;}}
+    {try{if(!client.Connected)throw new IOException("Banana 未连接，未应用更改。");MixerRules.Validate(key,value);pending[key]=value;if(savedConfiguration is not null){var desired=new Dictionary<string,float>(savedConfiguration.Parameters){[key]=value};savedConfiguration=savedConfiguration with{Parameters=desired};}MarkSessionDirty();}catch(Exception e) when(e is InvalidDataException or IOException){status.Text=e.Message;}}
     private float ReadValue(string key)
     {
         var actual=client.Get(key);
@@ -214,7 +216,8 @@ internal sealed class MixerPanel:Border,IDisposable
     internal void RefreshDevices()
     {
         var input=client.Devices(true);var output=client.Devices(false);
-        updating=true;try{foreach(var d in devices){var source=(d.Input?input:output).Where(v=>v.Type!=5||!d.Input&&d.Index==0).ToArray();d.Combo.ItemsSource=source;var name=client.DeviceName(d.Input,d.Index);d.Combo.SelectedItem=source.FirstOrDefault(v=>v.Name==name&&v.Type==3)??source.FirstOrDefault(v=>v.Name==name);}}finally{updating=false;}
+        updating=true;try{foreach(var d in devices){var source=(d.Input?input:output).Where(v=>v.Type!=5||!d.Input&&d.Index==0).ToArray();var oldType=(d.Combo.SelectedItem as MixerDevice)?.Type;d.Combo.ItemsSource=source;var name=client.DeviceName(d.Input,d.Index);d.Combo.SelectedItem=source.FirstOrDefault(v=>v.Name==name&&v.Type==oldType)??source.FirstOrDefault(v=>v.Name==name&&v.Type==3)??source.FirstOrDefault(v=>v.Name==name);}}finally{updating=false;}
+        if(unresolved.Count>0)sessionReady=false;
     }
     internal void Poll(bool force=false)
     {
@@ -223,13 +226,16 @@ internal sealed class MixerPanel:Border,IDisposable
         Attempt(()=>
         {
             long now=Environment.TickCount64;
-            if(force||now>=nextConnection){client.Refresh();nextConnection=now+1000;status.Text=client.Status;}
+            if(force||now>=nextConnection){client.Refresh();nextConnection=now+1000;status.Text=client.Status+(sessionNotice is null?"":" · "+sessionNotice);}
             controls.IsEnabled=client.Connected;
-            if(!client.Connected){pending.Clear();awaiting.Clear();wasConnected=false;return;}
+            if(!client.Connected){wasConnected=false;sessionReady=false;nextSessionRestore=0;return;}
             if(!wasConnected){RefreshDevices();wasConnected=true;force=true;}
+            if(deviceRefreshDue>0&&now>=deviceRefreshDue&&!devices.Any(x=>x.Combo.IsDropDownOpen)){deviceRefreshDue=0;RefreshDevices();if(settings is MixerSampleRates rates)_=rates.RefreshAsync();}
+            RestoreSession();
+            controls.IsEnabled=sessionReady;if(!sessionReady)return;
             if(pending.Count>0)
             {
-                var writes=pending.ToArray();pending.Clear();foreach(var pair in writes){client.Set(pair.Key,pair.Value);awaiting[pair.Key]=(pair.Value,now+1500);}nextRead=0;
+                var writes=pending.ToArray();foreach(var pair in writes){if(unresolved.Any(x=>pair.Key.StartsWith(Prefix(x),StringComparison.Ordinal)))continue;client.Set(pair.Key,pair.Value);pending.Remove(pair.Key);awaiting[pair.Key]=(pair.Value,now+1500);}nextRead=0;
             }
             if(!IsVisible&&!force)return;
             foreach(var meter in meters)meter();
@@ -245,6 +251,6 @@ internal sealed class MixerPanel:Border,IDisposable
         });
     }
     private void Attempt(Action action)
-    {try{action();}catch(Exception e) when(e is InvalidDataException or IOException or InvalidOperationException or System.ComponentModel.Win32Exception){status.Text=e.Message;pending.Clear();awaiting.Clear();controls.IsEnabled=false;wasConnected=false;}}
-    public void Dispose(){if(disposed)return;disposed=true;timer.Stop();inputEditor.Dispose();outputEditor.Dispose();microphoneEq.Dispose();settings?.Dispose();pending.Clear();awaiting.Clear();client.Dispose();}
+    {try{action();}catch(Exception e) when(e is InvalidDataException or IOException or InvalidOperationException or System.ComponentModel.Win32Exception){status.Text=e.Message;controls.IsEnabled=false;wasConnected=false;}}
+    public void Dispose(){if(disposed)return;FlushConfiguration();sessionSaveTimer.Stop();disposed=true;timer.Stop();inputEditor.Dispose();outputEditor.Dispose();microphoneEq.Dispose();settings?.Dispose();pending.Clear();awaiting.Clear();client.Dispose();}
 }

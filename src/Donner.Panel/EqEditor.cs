@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -23,21 +23,22 @@ internal sealed class EqEditor:Border,IDisposable
     private readonly ComboBox type=new(){Width=130,Foreground=Brushes.Black,ItemsSource=new[]{"Bell · 钟形","低切 · High Pass","高切 · Low Pass","低架 · Low Shelf","高架 · High Shelf","陷波 · Notch","带通 · Band Pass"},Margin=new Thickness(6,0,12,0)};
     private readonly TextBox frequency=Number(74),gain=Number(62),q=Number(62),preamp=Number(62);
     private readonly TextBlock status=new(){FontSize=12,Foreground=new SolidColorBrush(Color.FromRgb(165,181,197)),Margin=new Thickness(0,8,0,0),TextWrapping=TextWrapping.Wrap};
-    private readonly StackPanel bandButtons=new(){Orientation=Orientation.Horizontal};
+    private readonly WrapPanel bandButtons=new();
     private readonly DispatcherTimer timer=new(){Interval=TimeSpan.FromMilliseconds(80)};
     private readonly float[] samples=new float[2048];
     private bool updating;
     private string? editError,readError;
     private int index,selected;
+    private long nextOutputFields;
     internal int SelectedTarget=>index;
     internal event Action<int>? TargetChanged;
     internal EqEditor(IEqEditorSource source,Func<int,string>? deviceName=null)
     {
-        this.source=source;this.deviceName=deviceName;if(source.IsOutput)timer.Interval=TimeSpan.FromMilliseconds(500);MinWidth=0;MinHeight=480;Margin=new Thickness(0,16,0,0);Padding=new Thickness(14);CornerRadius=new CornerRadius(8);
+        this.source=source;this.deviceName=deviceName;MinWidth=0;MinHeight=480;Margin=new Thickness(0,16,0,0);Padding=new Thickness(14);CornerRadius=new CornerRadius(8);
         Background=new SolidColorBrush(Color.FromRgb(22,24,31));TextElement.SetForeground(this,Brushes.White);TextElement.SetFontFamily(this,new FontFamily("Microsoft YaHei UI"));TextElement.SetFontSize(this,13);
         input.ItemsSource=source.Targets;
         enabled.Content=source.IsOutput?"启用输出 EQ":"启用麦克风 EQ";
-        Graph.MinimumQ=source.IsOutput?1:.1;Graph.MaximumQ=source.IsOutput?100:20;Graph.MaximumGain=source.IsOutput?12:24;
+        Graph.MinimumQ=source.IsOutput?.1:.1;Graph.MaximumQ=source.IsOutput?100:20;Graph.MaximumGain=source.IsOutput?12:24;
         var body=new Grid();Child=body;
         foreach(var height in new[]{GridLength.Auto,new GridLength(260),GridLength.Auto,GridLength.Auto})body.RowDefinitions.Add(new(){Height=height});
         var header=new DockPanel{Margin=new Thickness(0,0,0,12)};body.Children.Add(header);
@@ -46,18 +47,19 @@ internal sealed class EqEditor:Border,IDisposable
         if(!source.IsOutput){headerLeft.Children.Add(new TextBlock{Text="输出增益",VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(20,0,8,0)});headerLeft.Children.Add(preamp);headerLeft.Children.Add(new TextBlock{Text="dB",VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(5,0,0,0)});}headerLeft.Children.Add(deviceLabel);
         Grid.SetRow(Graph,1);body.Children.Add(Graph);
         var editor=new StackPanel{Margin=new Thickness(0,10,0,0)};Grid.SetRow(editor,2);body.Children.Add(editor);editor.Children.Add(bandButtons);
-        for(int i=0;i<6;i++)
+        for(int i=0;i<(source.IsOutput?6:10);i++)
         {
-            int band=i;var button=new Button{Content=$"频段 {i+1}",Tag=i,FontSize=12,Padding=new Thickness(15,6,15,6),Margin=new Thickness(0,0,8,0),Background=new SolidColorBrush(EqGraph.Colors[i]),Foreground=Brushes.Black};bandButtons.Children.Add(button);button.Click+=(_,_)=>SelectBand(band);
+            int band=i;var button=new Button{Content=$"频段 {i+1}",Tag=i,FontSize=12,Padding=new Thickness(10,6,10,6),Margin=new Thickness(0,0,8,0),Background=new SolidColorBrush(EqGraph.Colors[i]),Foreground=Brushes.Black};bandButtons.Children.Add(button);button.Click+=(_,_)=>SelectBand(band);
         }
         var fields=new WrapPanel{Margin=new Thickness(0,10,0,0)};editor.Children.Add(fields);
         fields.Children.Add(type);fields.Children.Add(bandEnabled);AddField(fields,"频率",frequency,"Hz");AddField(fields,"增益",gain,"dB");AddField(fields,"Q",q,"");
-        editor.Children.Add(new TextBlock{Text=source.IsOutput?"拖动节点调节频率、增益；滚轮调 Q。黄色为总频响。输出增益范围 ±12 dB，Q 范围 1–100。":"拖动节点：左右调频率，上下调增益；滚轮调 Q。黄色为总频响，灰色为所选输入频谱（−90～0 dBFS）。",FontSize=11,Foreground=new SolidColorBrush(Color.FromRgb(146,158,178)),Margin=new Thickness(0,12,0,0),TextWrapping=TextWrapping.Wrap});
+        editor.Children.Add(new TextBlock{Text=source.IsOutput?"拖动节点调节频率、增益；滚轮调 Q。黄色为总频响，灰色为所选输出的真实频谱。输出增益范围 ±12 dB，Q 范围 0.1–100。":"拖动节点：左右调频率，上下调增益；滚轮调 Q。黄色为总频响，灰色为所选输入频谱（−90～0 dBFS）。",FontSize=11,Foreground=new SolidColorBrush(Color.FromRgb(146,158,178)),Margin=new Thickness(0,12,0,0),TextWrapping=TextWrapping.Wrap});
         var footer=new StackPanel();Grid.SetRow(footer,3);body.Children.Add(footer);footer.Children.Add(status);
-        footer.Children.Add(new TextBlock{Text=source.IsOutput?"处理送往所选输出总线的混合声音。左右联动仅将本次修改同步到两侧。":"只处理所选硬件输入，伴奏保持原样。切换页面后继续处理；退出 Donner 面板后恢复原声。每次启动默认旁通。",FontSize=11,Foreground=new SolidColorBrush(Color.FromRgb(146,158,178)),Margin=new Thickness(0,6,0,0),TextWrapping=TextWrapping.Wrap});
+        footer.Children.Add(new TextBlock{Text=source.IsOutput?"处理送往所选输出总线的混合声音。左右联动仅将本次修改同步到两侧。":"只处理所选硬件输入，伴奏保持原样。切换页面后继续处理；退出 Donner 面板后恢复原声。下次启动恢复上次的设置。",FontSize=11,Foreground=new SolidColorBrush(Color.FromRgb(146,158,178)),Margin=new Thickness(0,6,0,0),TextWrapping=TextWrapping.Wrap});
         frequency.Tag="Frequency";gain.Tag="Gain";q.Tag="Q";preamp.Tag="Preamp";
         input.SelectionChanged+=(_,_)=>{if(!updating&&input.SelectedIndex>=0)SelectInput(input.SelectedIndex);};
-        channel.SelectionChanged+=(_,_)=>{if(!updating)RefreshFields();};
+        channel.SelectionChanged+=(_,_)=>{if(!updating){RefreshFields();ViewChanged?.Invoke();}};
+        linked.Click+=(_,_)=>ViewChanged?.Invoke();
         enabled.Click+=(_,_)=>TryEdit(()=>Current with{Enabled=enabled.IsChecked==true});
         bandEnabled.Click+=(_,_)=>TryEdit(()=>{var c=Current;c.Bands[selected]=c.Bands[selected] with{Enabled=bandEnabled.IsChecked==true};return c;});
         type.SelectionChanged+=(_,_)=>{if(!updating&&type.SelectedIndex>=0)TryEdit(()=>{var c=Current;c.Bands[selected]=c.Bands[selected] with{Type=(EqFilter)type.SelectedIndex};return c;});};
@@ -72,7 +74,7 @@ internal sealed class EqEditor:Border,IDisposable
         {
             bool visible=IsVisible&&Window.GetWindow(this)?.WindowState!=WindowState.Minimized;source.Monitor(visible,index);if(!visible)return;source.Maintain();
             Graph.SampleRate=source.SampleRate;source.Spectrum(index,samples);Graph.UpdateSpectrum(samples,source.HasAudio);
-            if(source.IsOutput&&!Graph.IsMouseCaptureWithin&&!type.IsDropDownOpen&&!input.IsDropDownOpen&&!channel.IsDropDownOpen&&!new[]{frequency,gain,q,preamp}.Any(x=>x.IsKeyboardFocusWithin))RefreshFields();
+            if(source.IsOutput&&Environment.TickCount64>=nextOutputFields&&!Graph.IsMouseCaptureWithin&&!type.IsDropDownOpen&&!input.IsDropDownOpen&&!channel.IsDropDownOpen&&!new[]{frequency,gain,q,preamp}.Any(x=>x.IsKeyboardFocusWithin)){nextOutputFields=Environment.TickCount64+500;RefreshFields();}
             status.Text=editError??readError??source.Status;
         };
         Loaded+=(_,_)=>{source.Monitor(IsVisible,index);timer.Start();};Unloaded+=(_,_)=>{source.Monitor(false,index);timer.Stop();};IsVisibleChanged+=(_,_)=>{source.Monitor(IsVisible,index);if(IsVisible)timer.Start();else timer.Stop();};SelectInput(0);
@@ -86,7 +88,7 @@ internal sealed class EqEditor:Border,IDisposable
     }
     internal void SelectInput(int value)
     {
-        index=Math.Clamp(value,0,source.Targets.Length-1);updating=true;input.SelectedIndex=index;updating=false;RefreshFields();RefreshTargetInfo();source.Monitor(IsVisible,index);TargetChanged?.Invoke(index);
+        index=Math.Clamp(value,0,source.Targets.Length-1);updating=true;input.SelectedIndex=index;updating=false;RefreshFields();RefreshTargetInfo();source.Monitor(IsVisible,index);TargetChanged?.Invoke(index);ViewChanged?.Invoke();
     }
     internal void RefreshTargetInfo()
     {
@@ -94,7 +96,14 @@ internal sealed class EqEditor:Border,IDisposable
         string text="设备："+(deviceName?.Invoke(index)??"未选择");
         if(deviceLabel.Text!=text){deviceLabel.Text=text;deviceLabel.ToolTip=text;}
     }
-    private void SelectBand(int value){selected=value;RefreshFields();}
+    internal void InvalidateSource()=>source.Invalidate();
+    internal EqEditorState CaptureView()=>new(index,selected,Math.Max(0,channel.SelectedIndex),linked.IsChecked==true);
+    internal void RestoreView(EqEditorState? state)
+    {
+        if(state is null)return;updating=true;channel.SelectedIndex=state.Channel;linked.IsChecked=state.Linked;updating=false;selected=state.Band;SelectInput(state.Target);
+    }
+    internal event Action? ViewChanged;
+    private void SelectBand(int value){selected=value;RefreshFields();ViewChanged?.Invoke();}
     private void ChangeBand(EqBand value)
     {
         TryEdit(()=>{var config=Current;config.Bands[selected]=value;return config;});
@@ -125,7 +134,7 @@ internal sealed class EqEditor:Border,IDisposable
             frequency.Text=band.Frequency.ToString("0.##",CultureInfo.CurrentCulture);gain.Text=band.Gain.ToString("0.0",CultureInfo.CurrentCulture);q.Text=band.Q.ToString("0.##",CultureInfo.CurrentCulture);preamp.Text=config.Preamp.ToString("0.0",CultureInfo.CurrentCulture);
             gain.IsEnabled=band.Type is EqFilter.Bell or EqFilter.LowShelf or EqFilter.HighShelf;
             Graph.Settings=config;Graph.Selected=selected;Graph.SampleRate=source.SampleRate;Graph.InvalidateVisual();
-            for(int i=0;i<6;i++)((Button)bandButtons.Children[i]).Opacity=i==selected?1:.55;
+            for(int i=0;i<(source.IsOutput?6:10);i++)((Button)bandButtons.Children[i]).Opacity=i==selected?1:.55;
         }
         catch(Exception e) when(e is IOException or InvalidDataException){status.Text=readError=e.Message;}
         finally{updating=false;}

@@ -1,4 +1,4 @@
-﻿using System.Diagnostics;
+using System.Diagnostics;
 using System.ComponentModel;
 using System.Text;
 using System.Text.Json;
@@ -53,7 +53,7 @@ public partial class MainWindow : Window
         StreamModeCombo.ItemsSource=new[]{new DriverOption(1,"按需开启"),new DriverOption(2,"持续开启")};
         OutputFormatCombo.SelectionChanged+=(_,_)=>{if(!rendering&&OutputFormatCombo.SelectedItem is DriverOption option)selectedFormat=option.Value;};
         StreamModeCombo.SelectionChanged+=(_,_)=>{if(!rendering&&StreamModeCombo.SelectedItem is DriverOption option)selectedStreamMode=option.Value;};
-        Title="Donner 中文控制面板 · v1.37 · topsai (范斯特洛夫斯基)";
+        Title="Donner 中文控制面板 · v1.38 · topsai (范斯特洛夫斯基)";
         AboutVersion.Text="版本 "+typeof(MainWindow).Assembly.GetName().Version?.ToString(3);
         var smoke=Array.IndexOf(args,"--smoke");
         smokeDirectory=smoke>=0 && smoke+1<args.Length?Path.GetFullPath(args[smoke+1]):null;
@@ -67,7 +67,7 @@ public partial class MainWindow : Window
         presets=new PresetStore(Path.Combine(storage,"presets"));
         var start=new ProcessStartInfo(Path.Combine(AppContext.BaseDirectory,"Donner.Host.exe"));
         client=new HostClient(start);session=new DeviceSession(client.SendAsync);
-        InitializeMeters();InitializeMixer();InitializeUpdates();
+        InitializeMeters();InitializeMixer();InitializeUpdates();InitializeSessionPersistence();
         RateCombo.SelectionChanged+=(_,_)=>{if(!rendering&&RateCombo.SelectedItem is RateOption rate)selection.Rate=rate.Value;};
         BufferCombo.SelectionChanged+=(_,_)=>{if(!rendering&&BufferCombo.SelectedItem is uint size)selection.Buffer=size;};
         Pages.SelectionChanged+=(_,_)=>UpdatePageMenu();
@@ -155,7 +155,7 @@ public partial class MainWindow : Window
         try {await action();}
         catch(Exception e) when(e is IOException or InvalidDataException or TimeoutException or JsonException or Win32Exception or UnauthorizedAccessException)
         {Record(e.Message);}
-        finally {busy=false;interactionLocked=false;if(!closed)Render();}
+        finally {try{if(!closed)await RestoreHardwareSession();}catch(Exception e) when(e is IOException or InvalidDataException){Record(e.Message);}busy=false;interactionLocked=false;if(!closed)Render();}
     }
     private bool IsOperationInput(object source)
     {
@@ -191,6 +191,7 @@ public partial class MainWindow : Window
     {
         if(closed||session.Snapshot.Demo)return;
         StopMeters();
+        mixerPanel?.ScheduleDeviceRefresh();ScheduleNamesRestore();
         deviceChanges++;pending.Drain();volumeTimer.Stop();selection.Clear();
         session.InvalidateHardware();Record(message+"，旧连接已失效。");Render();
         reconnectTimer.Stop();reconnectTimer.Start();
@@ -248,7 +249,7 @@ public partial class MainWindow : Window
             try
             {
                 Directory.CreateDirectory(reconnectCheckDirectory);
-                File.WriteAllText(Path.Combine(reconnectCheckDirectory,"state.json"),JsonSerializer.Serialize(new {Version="1.37",ProcessId=Environment.ProcessId,Updated=DateTimeOffset.Now,d.Connected,d.Demo,d.Status,d.SampleRate,d.BufferSize,DeviceChanges=deviceChanges,NotificationRegistered=notifications is not null},new JsonSerializerOptions {WriteIndented=true}));
+                File.WriteAllText(Path.Combine(reconnectCheckDirectory,"state.json"),JsonSerializer.Serialize(new {Version="1.38",ProcessId=Environment.ProcessId,Updated=DateTimeOffset.Now,d.Connected,d.Demo,d.Status,d.SampleRate,d.BufferSize,DeviceChanges=deviceChanges,NotificationRegistered=notifications is not null},new JsonSerializerOptions {WriteIndented=true}));
             }
             catch(IOException){}
         }
@@ -344,6 +345,7 @@ public partial class MainWindow : Window
     private void UpdateChannel(ChannelView view,ChannelState state)
     {
         view.State=state;view.Label.Text=state.Name;
+        if(view.SelectedPercent is null&&panelState.Percents.TryGetValue(PercentKey(state.Direction,state.Number),out var remembered)&&state.Volume==VolumeScale.ToRaw(remembered))view.SelectedPercent=remembered;
         if(!view.Slider.IsMouseCaptureWithin&&!volumeTimer.IsEnabled)
         {
             if(view.SelectedPercent is {} selected&&state.Volume!=VolumeScale.ToRaw(selected))view.SelectedPercent=null;
@@ -386,6 +388,7 @@ public partial class MainWindow : Window
             await cleanup;
             if(driverChange&&!session.Snapshot.Demo)await session.RefreshAsync();
             var reply=await session.ApplyAsync(changes);
+            if(reply.Success)RememberHardwareState(changes);
             Record(reply.Message);
             foreach(var result in reply.Results??[])Record($"{result.Operation}：{(result.Success?"成功":"失败")} · {result.Message}");
         });} finally {meterSuspended=false;}
@@ -404,7 +407,7 @@ public partial class MainWindow : Window
     private async void LinkedClick(object sender,RoutedEventArgs e)
     {
         if(busy)return;var enabled=LinkedCheck.IsChecked==true;
-        if(!enabled){session.Linked=false;Record("已关闭左右输出联动");return;}
+        if(!enabled){session.Linked=false;RememberHardwareState();Record("已关闭左右输出联动");return;}
         await FlushVolumes();
         var left=session.Snapshot.Channels.FirstOrDefault(c=>c.Direction==0&&c.Number==1);
         if(left?.Volume is not {} value){session.Linked=false;Render();return;}
@@ -412,7 +415,7 @@ public partial class MainWindow : Window
         {
             session.Linked=false;
             var changes=ControlPolicy.VolumeChanges(session.Snapshot,0,1,value,true);
-            var reply=await session.ApplyAsync(changes);session.Linked=reply.Success;Record(reply.Message);
+            var reply=await session.ApplyAsync(changes);session.Linked=reply.Success;if(reply.Success)RememberHardwareState(changes);Record(reply.Message);
             foreach(var result in reply.Results??[])Record($"{result.Operation}：{(result.Success?"成功":"失败")} · {result.Message}");
         });
     }
@@ -440,7 +443,7 @@ public partial class MainWindow : Window
         {
             await cleanup;
             if(!session.Snapshot.Demo)await session.RefreshAsync();
-            var p=PresetCapture.From(session.Snapshot,PresetName.Text,session.Linked);presets.Save(p);LoadPresets();Record("已保存预设："+p.Name);
+            var p=PresetCapture.From(session.Snapshot,PresetName.Text,session.Linked);if(!p.Demo)p=p with{Version=2,Settings=ReadableHardwareSettings(p.Settings),Mixer=await CapturePresetMixer(),Application=await CaptureApplicationPreset()};presets.Save(p);LoadPresets();Record("已保存预设："+p.Name);
         });} finally {meterSuspended=false;}
     }
     private async void SavePresetClick(object sender,RoutedEventArgs e)=>await SavePreset();
@@ -459,15 +462,30 @@ public partial class MainWindow : Window
                 "safemode"=>$"ASIO 安全模式：{(s.Value==1?"开启":"关闭")}","streammode"=>$"音频流：{(s.Value==2?"持续开启":"按需开启")}",
                 "format"=>$"输出格式：{session.Snapshot.Driver.OutputFormats.FirstOrDefault(f=>f.Id==s.Value)?.Bits.ToString()??s.Value.ToString()} 位",_=>s.Kind}));
         else PresetPreview.Text="从左侧选择预设，检查内容后点击应用。";
+        if(PresetsList.SelectedItem is Preset {Mixer:{} mixer})PresetPreview.Text+=$"\n\n调音台：{(mixer.Enabled?"启用":"关闭")} · {mixer.Devices.Length} 个设备绑定 · {mixer.Parameters.Count} 项参数\n输入 EQ："+string.Join("、",mixer.InputEq.Select((x,i)=>$"输入{i+1} {(x.Enabled?"启用":"关闭")}"));
         EnableControls();
     }
     private async void ApplyPresetClick(object sender,RoutedEventArgs e)
     {
-        if(PresetsList.SelectedItem is not Preset p)return;await FlushVolumes();selection.Clear();selectedFormat=null;selectedStreamMode=null;
+        if(PresetsList.SelectedItem is not Preset p)return;
+        if(p.Mixer?.Enabled==true&&VoicemeeterClient.InstalledDirectory() is null){Record("该预设需要调音台，请先安装 Banana。");return;}
+        await FlushVolumes();selection.Clear();selectedFormat=null;selectedStreamMode=null;
         meterSuspended=true;var cleanup=StopMetersAndWaitAsync();
-        try {await Run(async()=>{await cleanup;if(!session.Snapshot.Demo)await session.RefreshAsync();ControlPolicy.ValidatePreset(session.Snapshot,p);var reply=await session.ApplyAsync(p.Settings);
-            if(reply.Success)session.Linked=p.Linked;Record(reply.Message);foreach(var result in reply.Results??[])Record($"{result.Operation}：{result.Message}");});}
-        finally {meterSuspended=false;}
+        try {await Run(async()=>
+        {
+            await cleanup;if(!session.Snapshot.Demo)await session.RefreshAsync();ControlPolicy.ValidateFormat(p);
+            if(p.Demo!=session.Snapshot.Demo||p.DeviceId!=session.Snapshot.DeviceId)throw new InvalidDataException("预设与当前设备不匹配。");
+            var changes=p.Settings.Where(x=>HardwareValue(session.Snapshot,x)!=x.Value).ToArray();
+            session.Linked=p.Linked;
+            if(!p.Demo){panelState.Hardware[p.DeviceId]=p with{Mixer=null,Application=null};restoredHardware=p.DeviceId;}
+            foreach(var change in changes)
+            {
+                try{ControlPolicy.Validate(session.Snapshot,change);var reply=await session.ApplyAsync([change]);if(!reply.Success)throw new IOException(reply.Message);deferredHardware.Remove(HardwareKey(change));}
+                catch(Exception error) when(error is IOException or InvalidDataException){if(!p.Demo)deferredHardware.Add(HardwareKey(change));Record("已保留待恢复项："+change.Kind+" · "+error.Message);}
+            }
+            await RestorePresetMixer(p.Mixer);await RestoreApplicationPreset(p.Application);SchedulePanelSave();Record("预设已载入；未连接或被占用的设备设置保留待恢复。");
+        });}
+        finally{meterSuspended=false;}
     }
     private string Summary()
     {

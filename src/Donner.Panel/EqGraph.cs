@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -8,7 +8,7 @@ namespace Donner.Panel;
 
 internal sealed class EqGraph:FrameworkElement
 {
-    internal static readonly Color[] Colors=[Color.FromRgb(83,218,150),Color.FromRgb(60,201,230),Color.FromRgb(111,149,255),Color.FromRgb(206,104,241),Color.FromRgb(246,172,66),Color.FromRgb(237,105,105)];
+    internal static readonly Color[] Colors=[Color.FromRgb(83,218,150),Color.FromRgb(60,201,230),Color.FromRgb(111,149,255),Color.FromRgb(206,104,241),Color.FromRgb(246,172,66),Color.FromRgb(237,105,105),Color.FromRgb(92,211,204),Color.FromRgb(209,181,108),Color.FromRgb(153,125,238),Color.FromRgb(226,138,188)];
     internal MicrophoneEqSettings Settings {get;set;}=MicrophoneEqSettings.Flat();
     internal int SampleRate {get;set;}=48000;
     internal double MinimumQ=.1,MaximumQ=20,MaximumGain=24;
@@ -54,14 +54,14 @@ internal sealed class EqGraph:FrameworkElement
             dc.DrawGeometry(new SolidColorBrush(Color.FromArgb(58,190,199,214)),new Pen(new SolidColorBrush(Color.FromArgb(120,180,190,207)),1),geometry);
         }
         var coefficients=Settings.Bands.Select(b=>EqCoefficients.Create(b,SampleRate)).ToArray();
-        for(int band=0;band<6;band++)
+        for(int band=0;band<Settings.Bands.Length;band++)
         {
             if(!Settings.Bands[band].Enabled)continue;
             DrawCurve(dc,hz=>coefficients[band].Decibels(hz,SampleRate),new Pen(new SolidColorBrush(Color.FromArgb(125,Colors[band].R,Colors[band].G,Colors[band].B)),1));
         }
         DrawCurve(dc,hz=>Settings.Preamp+coefficients.Sum(c=>c.Decibels(hz,SampleRate)),new Pen(new SolidColorBrush(Color.FromRgb(250,210,72)),2.2));
         dc.Pop();
-        for(int i=0;i<6;i++)
+        for(int i=0;i<Settings.Bands.Length;i++)
         {
             var band=Settings.Bands[i];var point=new Point(FrequencyX(band.Frequency),GainY(NodeGain(band)));
             dc.DrawEllipse(band.Enabled?new SolidColorBrush(Colors[i]):new SolidColorBrush(Color.FromRgb(80,83,94)),new Pen(i==Selected?Brushes.White:Brushes.Transparent,i==Selected?2:0),point,i==Selected?7:5,i==Selected?7:5);
@@ -76,7 +76,7 @@ internal sealed class EqGraph:FrameworkElement
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
         base.OnMouseLeftButtonDown(e);Focus();var p=e.GetPosition(this);double closest=20;int found=-1;
-        for(int i=0;i<6;i++){var b=Settings.Bands[i];double distance=(p-new Point(FrequencyX(b.Frequency),GainY(NodeGain(b)))).Length;if(distance<closest){closest=distance;found=i;}}
+        for(int i=0;i<Settings.Bands.Length;i++){var b=Settings.Bands[i];double distance=(p-new Point(FrequencyX(b.Frequency),GainY(NodeGain(b)))).Length;if(distance<closest){closest=distance;found=i;}}
         if(found<0)return;Selected=found;SelectionChanged?.Invoke(found);dragging=CaptureMouse();InvalidateVisual();e.Handled=true;
     }
     protected override void OnMouseMove(MouseEventArgs e)

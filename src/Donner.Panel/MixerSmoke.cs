@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -22,7 +22,8 @@ public partial class MainWindow
         public float Get(string key)=>Values.GetValueOrDefault(key,key.EndsWith(".f")?1000:key.EndsWith(".q")?1:0);
         public void Set(string key,float value){if(!Connected)throw new IOException("Disconnected");MixerRules.Validate(key,value);if(!DelayWrites)Values[key]=value;Writes.Add((key,value));}
         public string DeviceName(bool input,int index)=>Names.GetValueOrDefault((input,index),"");
-        public MixerDevice[] Devices(bool input)=>[new(1,""),new(3,"Livejack Audio Interface"),new(5,"Donner USB Audio Device")];
+        internal MixerDevice[]? InputDevices;
+        public MixerDevice[] Devices(bool input)=>input&&InputDevices is not null?InputDevices:[new(1,""),new(3,"Livejack Audio Interface"),new(5,"Donner USB Audio Device")];
         public void SetDevice(bool input,int index,MixerDevice device){if(device.Type==5&&(input||index!=0))throw new IOException("ASIO位置错误");Names[(input,index)]=device.Name;}
         public float Level(bool input,int index)=>.04f+index*.08f;
         public void Dispose(){}
@@ -62,7 +63,7 @@ public partial class MainWindow
         try{if(waitingForOldMeter.IsCompleted)throw new Exception("已离开主页的旧采集任务逃过设备写入等待。");}
         finally{cleanupGate.TrySetResult();}
         await waitingForOldMeter;
-        await VerifyMicrophoneEqUi();
+        VerifyMixerSessions();await VerifyMicrophoneEqUi();
         var customChecks=MixerEndpointNamesSmoke.Verify();await MixerSampleRatesSmoke.VerifyAsync();await MixerHomeMetersSmoke.VerifyAsync();await BackgroundMeterSourceSmoke.VerifyAsync();
         File.WriteAllText(Path.Combine(smokeDirectory!,"mixer-extended-checks.json"),JsonSerializer.Serialize(new{Success=true,CustomNames=customChecks,SampleRates=true}));
         var nameDialogClock=System.Diagnostics.Stopwatch.StartNew();

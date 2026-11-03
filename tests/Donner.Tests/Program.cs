@@ -1,4 +1,4 @@
-﻿using Donner.Core;
+using Donner.Core;
 using System.Text.Json;
 using System.Diagnostics;
 
@@ -233,12 +233,12 @@ Test("快速拔插通知使旧连接失效并丢弃正在返回的旧状态",()=
 Test("拔插通知不退出演示模式",()=>{
     var session=new DeviceSession(_=>throw new Exception("不应访问硬件"));session.SetDemo(true);session.InvalidateHardware();Check(session.Snapshot.Demo,"通知破坏演示模式");
 });
-Test("调音台默认关闭，启停持久化且损坏配置不自动启用",()=>
+Test("调音台启停持久化，损坏主文件恢复备份",()=>
 {
     var path=Path.Combine(temp,"mixer.json");Check(!MixerSettings.Load(path).Enabled,"调音台必须默认关闭");
     new MixerSettings(true).Save(path);Check(MixerSettings.Load(path).Enabled,"启用设置未保存");
     new MixerSettings(false).Save(path);Check(!MixerSettings.Load(path).Enabled,"关闭设置未保存");
-    File.WriteAllText(path,"bad json");Reject(()=>MixerSettings.Load(path));
+    File.WriteAllText(path,"bad json");Check(MixerSettings.Load(path).Enabled,"未恢复上次有效备份");File.WriteAllText(path+".bak","bad json");Reject(()=>MixerSettings.Load(path));
 });
 Test("Banana参数只允许已支持的条带、路由和有效值",()=>
 {
@@ -344,6 +344,41 @@ Test("修改一个麦克风EQ不重置其他麦克风滤波状态",()=>
     settings[0]=first with{Preamp=1};actual.Publish(new(settings,48000));
     actual.BeginBlock(48000);reference.BeginBlock(48000);actual.ProcessChannel(2,signal,a);reference.ProcessChannel(2,signal,b);
     Check(a.Zip(b,(x,y)=>Math.Abs(x-y)).Max()<.000001,"更改输入1扰动了输入2滤波器");
+});
+Test("调音台预设v2往返保存设备路由和EQ启用，兼容v1",()=>
+{
+    var config=new MixerConfiguration{Devices=[new(true,0,3,"Mic","stable-id")],Parameters=new(){["Strip[0].Gain"]=-6,["Strip[0].B1"]=1},InputEq=[MicrophoneEqSettings.Flat() with{Enabled=true},MicrophoneEqSettings.Flat(),MicrophoneEqSettings.Flat()]};
+    var preset=PresetCapture.From(device,"完整配置",true) with{Version=2,Mixer=config};
+    var store=new PresetStore(Path.Combine(temp,"mixer-presets"));store.Save(preset);var restored=store.ReadAll().Single();
+    Check(restored.Mixer!.InputEq[0].Enabled&&restored.Mixer.Parameters["Strip[0].Gain"]==-6&&restored.Mixer.Devices[0].Id=="stable-id","完整预设丢失调音台设置");
+    ControlPolicy.ValidateFormat(preset with{Version=1,Mixer=null});
+    Reject(()=>ControlPolicy.ValidateFormat(preset with{Mixer=config with{Parameters=new(){["Command.Restart"]=1}}}));
+});
+Test("配置原子保存与坏文件备份恢复保留有效版本",()=>
+{
+    string path=Path.Combine(temp,"session.json");var first=new MixerConfiguration{Parameters=new(){["Strip[0].Gain"]=-3}};
+    ConfigurationFiles.Save(path,first,x=>x.Validate());ConfigurationFiles.Save(path,first with{Parameters=new(){["Strip[0].Gain"]=-6}},x=>x.Validate());
+    File.WriteAllText(path,"broken");Check(ConfigurationFiles.Load<MixerConfiguration>(path,x=>x.Validate())!.Parameters["Strip[0].Gain"]==-3,"没有恢复有效备份");
+});
+Test("输入十段全部参与DSP，旧六段迁移保留频响且新增段关闭",()=>
+{
+    var old=MicrophoneEqSettings.Flat(6) with{Enabled=true};old.Bands[2]=new(EqFilter.Bell,650,-7,2);var migrated=old.UpgradeInput();
+    Check(migrated.Bands.Length==10&&migrated.Bands.Take(6).SequenceEqual(old.Bands)&&migrated.Bands.Skip(6).All(x=>!x.Enabled),"旧参数迁移改变音色");
+    var ten=MicrophoneEqSettings.Flat() with{Enabled=true};ten.Bands[9]=new(EqFilter.Bell,1000,6,1);
+    var dsp=new MicrophoneEqProcessor();dsp.Publish(new([ten,MicrophoneEqSettings.Flat(),MicrophoneEqSettings.Flat()],48000));
+    var input=Enumerable.Range(0,48000).Select(i=>(float)(.1*Math.Sin(2*Math.PI*1000*i/48000))).ToArray();var output=new float[input.Length];dsp.BeginBlock(48000);dsp.ProcessChannel(0,input,output);
+    double ratio=Math.Sqrt(output.Skip(24000).Sum(x=>(double)x*x)/input.Skip(24000).Sum(x=>(double)x*x));Check(Math.Abs(20*Math.Log10(ratio)-6)<.05,"第十段没有参与声音处理");
+});
+Test("完整预设文件导出导入保留所有参数、十段EQ和应用设置",()=>
+{
+    var all=new Dictionary<string,float>();foreach(string key in MixerRules.PersistentParameters)all[key]=key=="Option.sr"?44100:key.EndsWith(".f")?1000:key.EndsWith(".q")?1:0;
+    var eq=MicrophoneEqSettings.Flat() with{Enabled=true};eq.Bands[9]=eq.Bands[9] with{Gain=-3};
+    var mixer=new MixerConfiguration{Parameters=all,InputEq=[eq,MicrophoneEqSettings.Flat(),MicrophoneEqSettings.Flat()],View=new(1,new(2,9),new(4,5,1,false))};
+    var source=preset with{Version=2,Mixer=mixer,Application=new(true,false,new(){["device|0|1"]=37},[new("endpoint-id","我的麦克风")])};
+    var path=Path.Combine(temp,"full-export.json");PresetStore.ExportFile(path,source);var actual=PresetStore.ImportFile(path);
+    Check(JsonSerializer.Serialize(source)==JsonSerializer.Serialize(actual),"导出导入改变配置内容");
+    Reject(()=>ControlPolicy.ValidateFormat(source with{Settings=[new("mute",0,1,2)]}));
+    source.Mixer.Parameters["Command.Restart"]=1;Reject(()=>PresetStore.ExportFile(path,source));
 });
 Console.WriteLine($"热插拔结果：{passed} 通过，{failures} 失败");
 return failures==0?0:1;

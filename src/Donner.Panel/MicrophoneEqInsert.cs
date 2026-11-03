@@ -1,4 +1,4 @@
-﻿using System.Runtime.InteropServices;
+using System.Runtime.InteropServices;
 using System.Text;
 using Donner.Core;
 
@@ -13,13 +13,20 @@ internal sealed class MicrophoneEqInsert:IDisposable
     private readonly Empty start,stop,unregister;
     private readonly Callback callback;
     private readonly MicrophoneEqProcessor processor=new();
-    private readonly float[] ring=new float[4096];
+    private readonly float[] ring=new float[4096],outputRing=new float[4096];
     private readonly MicrophoneEqSettings[] settings=[MicrophoneEqSettings.Flat(),MicrophoneEqSettings.Flat(),MicrophoneEqSettings.Flat()];
-    private bool registered,disposed,monitoring;
+    private bool registered,disposed,monitoring,outputMonitoring,mainRegistered;
     private int sampleRate=48000,preparedRate=48000,restart,preview,position,ringTarget=-1;
+    private int outputPreview,outputPosition,outputRingTarget=-1;
+    private long outputFrames,outputLastActive;
+    internal long OutputFrames=>Interlocked.Read(ref outputFrames);
+    internal int OutputPreview {get=>Volatile.Read(ref outputPreview);set=>Volatile.Write(ref outputPreview,Math.Clamp(value,0,4));}
+    internal bool MainRegistered=>mainRegistered;
+    internal bool HasOutputAudio=>registered&&mainRegistered&&Interlocked.Read(ref outputFrames)>0&&Environment.TickCount64-Interlocked.Read(ref outputLastActive)<1200;
     private long frames,lastFrames,lastActive,nextRestart,releaseAt,releaseDeadline;
     internal bool HasAudio=>registered&&Frames>0&&Environment.TickCount64-lastActive<1200;
-    private int callbacks,callbackFault,inputChannels,outputChannels;
+    private int callbacks,callbackFault,inputChannels,outputChannels,bufferFrames;
+    internal long BypassFence=>Frames+SampleRate/50+Volatile.Read(ref bufferFrames);
     internal int InputChannels=>Volatile.Read(ref inputChannels);
     internal int OutputChannels=>Volatile.Read(ref outputChannels);
     internal string Status {get;private set;}="旁通 · 未启用麦克风 EQ";
@@ -40,7 +47,7 @@ internal sealed class MicrophoneEqInsert:IDisposable
     internal void Configure(int strip,MicrophoneEqSettings value)
     {
         value.Validate();var old=settings[strip];settings[strip]=value with{Bands=(EqBand[])value.Bands.Clone()};Publish();
-        try{if(settings.Any(x=>x.Enabled)&&!registered)Start();else if(!settings.Any(x=>x.Enabled)&&registered&&!monitoring){releaseAt=Frames+SampleRate/20;releaseDeadline=Environment.TickCount64+500;}}
+        try{if(settings.Any(x=>x.Enabled)&&!registered)Start();else if(!settings.Any(x=>x.Enabled)&&registered&&!monitoring&&!outputMonitoring){releaseAt=Frames+SampleRate/20;releaseDeadline=Environment.TickCount64+500;}}
         catch{settings[strip]=old;Publish();throw;}
         Status=settings.Any(x=>x.Enabled)?"麦克风 EQ 已启用":monitoring?"实时频谱 · EQ 旁通":"旁通 · 麦克风原声";
     }
@@ -50,6 +57,23 @@ internal sealed class MicrophoneEqInsert:IDisposable
         if(active&&!registered)Start();
         if(!active&&changed&&registered&&!settings.Any(x=>x.Enabled)){releaseAt=Frames+SampleRate/20;releaseDeadline=Environment.TickCount64+500;}
     }
+    internal void MonitorOutput(bool active,int target)
+    {
+        Volatile.Write(ref outputPreview,Math.Clamp(target,0,4));bool changed=outputMonitoring!=active;outputMonitoring=active;
+        if(active&&!registered)Start();
+        if(!active&&changed&&registered&&!monitoring&&!settings.Any(x=>x.Enabled)){releaseAt=Frames+SampleRate/20;releaseDeadline=Environment.TickCount64+500;}
+    }
+    internal bool BypassReady(long fence)
+    {
+        if(!registered||Frames>=fence)return true;
+        if(HasAudio)return false;
+        Release();processor.Reset();Publish();return true;
+    }
+    internal void CopyOutputSpectrum(Span<float> target)
+    {
+        if(Volatile.Read(ref outputRingTarget)!=Volatile.Read(ref outputPreview)){target.Clear();return;}
+        int end=Volatile.Read(ref outputPosition);for(int i=0;i<target.Length;i++)target[i]=outputRing[(end-target.Length+i)&4095];
+    }
     private void Publish(){preparedRate=SampleRate;processor.Publish(new(settings,preparedRate));}
     private void Start()
     {
@@ -57,8 +81,9 @@ internal sealed class MicrophoneEqInsert:IDisposable
         var name=Marshal.AllocHGlobal(64);
         try
         {
-            Marshal.Copy(new byte[64],0,name,64);var label=Encoding.ASCII.GetBytes("Donner Microphone EQ");Marshal.Copy(label,0,name,label.Length);
-            int result=register(1,callback,IntPtr.Zero,name);
+            Marshal.Copy(new byte[64],0,name,64);var label=Encoding.ASCII.GetBytes("Donner EQ / Spectrum");Marshal.Copy(label,0,name,label.Length);
+            int result=register(5,callback,IntPtr.Zero,name);mainRegistered=result==0;
+            if(result==1)result=register(1,callback,IntPtr.Zero,name);
             if(result!=0)throw new IOException(result==1?"麦克风输入效果接口已被其他程序占用，未接管。":$"无法注册麦克风 EQ（{result}）。");
             registered=true;
             result=start();if(result!=0){int release=unregister();if(release is 0 or 1)registered=false;throw new IOException($"无法启动麦克风 EQ（{result}）。");}
@@ -75,7 +100,7 @@ internal sealed class MicrophoneEqInsert:IDisposable
             nextRestart=Environment.TickCount64+1000;int result=stop();if(result==0)result=start();if(result==0)Interlocked.Exchange(ref restart,0);
             Status=result==0?"麦克风 EQ 已重新连接":$"麦克风 EQ 等待重连（{result}）";
         }
-        if(registered&&!monitoring&&!settings.Any(x=>x.Enabled)&&(Frames>=releaseAt||Environment.TickCount64>=releaseDeadline)){Release();Status="旁通 · 麦克风原声";}
+        if(registered&&!monitoring&&!outputMonitoring&&!settings.Any(x=>x.Enabled)&&(Frames>=releaseAt||Environment.TickCount64>=releaseDeadline)){Release();Status="旁通 · 麦克风原声";}
         if(registered&&Frames!=lastFrames){lastFrames=Frames;lastActive=Environment.TickCount64;Status=settings.Any(x=>x.Enabled)?"麦克风 EQ 已启用":monitoring?"实时频谱 · EQ 旁通":"旁通 · 麦克风原声";}
         else if(registered&&!HasAudio)Status="等待 Banana 音频缓冲，恢复后将自动重连。";
         if(CallbackFault!=0)Status="麦克风 EQ 回调异常，请关闭后重新启用。";
@@ -93,13 +118,15 @@ internal sealed class MicrophoneEqInsert:IDisposable
     }
     private unsafe int ProcessBuffer(int command,IntPtr data)
     {
-        if(command==1&&data!=IntPtr.Zero){Volatile.Write(ref sampleRate,Marshal.ReadInt32(data));return 0;}
+        if(command==1&&data!=IntPtr.Zero){processor.Reset();Volatile.Write(ref sampleRate,Marshal.ReadInt32(data));return 0;}
         if(command is 2 or 3){Interlocked.Exchange(ref restart,1);return 0;}
-        if(command!=10||data==IntPtr.Zero)return 0;
+        if(command is not (10 or 20)||data==IntPtr.Zero)return 0;
         // Windows long is 32 bits; the SDK's 128 read/write pointers are 64 bits in this x64 app.
         int* header=(int*)data;int sr=header[0],count=header[1],inputs=header[2],outputs=header[3];
         if(sr is <8000 or >384000||count is <1 or >16384||inputs is <0 or >128||outputs is <0 or >128){Interlocked.Exchange(ref callbackFault,1);return 0;}
-        Volatile.Write(ref sampleRate,sr);Volatile.Write(ref inputChannels,inputs);Volatile.Write(ref outputChannels,outputs);processor.BeginBlock(sr);
+        Volatile.Write(ref sampleRate,sr);
+        if(command==20){ReadOutput(data,count,inputs,outputs);return 0;}
+        Volatile.Write(ref bufferFrames,count);Volatile.Write(ref inputChannels,inputs);Volatile.Write(ref outputChannels,outputs);processor.BeginBlock(sr);
         float** reads=(float**)((byte*)data+16);float** writes=reads+128;
         for(int channel=0;channel<outputs;channel++)
         {
@@ -123,13 +150,35 @@ internal sealed class MicrophoneEqInsert:IDisposable
             if(reads[channel]!=null&&writes[channel]!=null)processor.ProcessChannel(channel,new ReadOnlySpan<float>(reads[channel],count),new Span<float>(writes[channel],count));
         Interlocked.Add(ref frames,count);Interlocked.Increment(ref callbacks);return 0;
     }
+    private unsafe void ReadOutput(IntPtr data,int count,int inputs,int outputs)
+    {
+        // MAIN has 22 Banana input channels followed by 5 buses of 8 channels.
+        // Outputs map only to the bus section. Preserve every output bit for bit.
+        if(inputs<62||outputs<40)return;
+        float** reads=(float**)((byte*)data+16);float** writes=reads+128;const int offset=22;
+        for(int c=0;c<40;c++)if(writes[c]!=null)
+        {
+            var destination=new Span<float>(writes[c],count);
+            if(reads[offset+c]!=null)new ReadOnlySpan<float>(reads[offset+c],count).CopyTo(destination);else destination.Clear();
+        }
+        int target=Volatile.Read(ref outputPreview);
+        if(outputRingTarget!=target){Array.Clear(outputRing);outputPosition=0;Volatile.Write(ref outputRingTarget,target);}
+        int first=offset+target*8;float* selected=null;double maximum=-1;
+        for(int c=first;c<Math.Min(first+8,inputs);c++)if(reads[c]!=null)
+        {
+            double energy=0;for(int i=0;i<count;i++)energy+=(double)reads[c][i]*reads[c][i];
+            if(energy>maximum){maximum=energy;selected=reads[c];}
+        }
+        int end=outputPosition;for(int i=0;i<count;i++)outputRing[(end+i)&4095]=selected!=null&&float.IsFinite(selected[i])?selected[i]:0;
+        Volatile.Write(ref outputPosition,(end+count)&4095);Interlocked.Add(ref outputFrames,count);Interlocked.Exchange(ref outputLastActive,Environment.TickCount64);
+    }
     private void Release()
     {
         if(registered)
         {
             stop();int result=unregister();
             if(result is not (0 or 1))throw new IOException("麦克风 EQ 注销失败，保留接口以避免音频回调失效。");
-            registered=false;
+            registered=false;mainRegistered=false;
         }
     }
     public void Dispose(){if(disposed)return;Release();disposed=true;GC.KeepAlive(callback);}

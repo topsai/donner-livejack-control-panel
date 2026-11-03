@@ -1,4 +1,4 @@
-﻿using System.Numerics;
+using System.Numerics;
 
 namespace Donner.Core;
 
@@ -6,10 +6,16 @@ public enum EqFilter { Bell,HighPass,LowPass,LowShelf,HighShelf,Notch,BandPass }
 public sealed record EqBand(EqFilter Type,double Frequency,double Gain,double Q,bool Enabled=true);
 public sealed record MicrophoneEqSettings(bool Enabled,double Preamp,EqBand[] Bands)
 {
-    public static MicrophoneEqSettings Flat()=>new(false,0,new double[]{80,200,600,1500,4000,10000}.Select(f=>new EqBand(EqFilter.Bell,f,0,1)).ToArray());
+    public const int InputBandCount=10;
+    public static MicrophoneEqSettings Flat(int count=InputBandCount)=>new(false,0,(count==6?new double[]{80,200,600,1500,4000,10000}:new double[]{40,80,160,315,630,1250,2500,5000,10000,16000}).Select(f=>new EqBand(EqFilter.Bell,f,0,1)).ToArray());
+    public MicrophoneEqSettings UpgradeInput()
+    {
+        Validate();if(Bands.Length==InputBandCount)return this with{Bands=(EqBand[])Bands.Clone()};
+        return this with{Bands=Bands.Concat(new double[]{40,315,2500,16000}.Select(f=>new EqBand(EqFilter.Bell,f,0,1,false))).ToArray()};
+    }
     public void Validate()
     {
-        if(!double.IsFinite(Preamp)||Preamp is <-24 or >12||Bands is null||Bands.Length!=6)throw new InvalidDataException("EQ输出增益范围为 -24 至 +12 dB，必须包含六个频段。");
+        if(!double.IsFinite(Preamp)||Preamp is <-24 or >12||Bands is null||Bands.Length is not (6 or InputBandCount))throw new InvalidDataException("EQ输出增益范围为 -24 至 +12 dB，必须包含六个或十个频段。");
         foreach(var band in Bands)if(band is null||!Enum.IsDefined(band.Type)||!double.IsFinite(band.Frequency)||band.Frequency is <20 or >20000||!double.IsFinite(band.Gain)||band.Gain is <-24 or >24||!double.IsFinite(band.Q)||band.Q is <.1 or >20)throw new InvalidDataException("EQ频率范围为20–20000 Hz，增益为±24 dB，Q为0.1–20。");
     }
 }
@@ -47,7 +53,7 @@ public readonly record struct EqCoefficients(double B0,double B1,double B2,doubl
 public sealed class MicrophoneEqBank
 {
     public int SampleRate {get;}
-    internal readonly EqCoefficients[] Filters=new EqCoefficients[18];
+    internal readonly EqCoefficients[] Filters=new EqCoefficients[3*MicrophoneEqSettings.InputBandCount];
     internal readonly bool[] Enabled=new bool[3];
     internal readonly double[] Gains=new double[3];
     public MicrophoneEqBank(MicrophoneEqSettings[] settings,int sampleRate)
@@ -57,7 +63,7 @@ public sealed class MicrophoneEqBank
         for(int i=0;i<3;i++)
         {
             settings[i].Validate();Enabled[i]=settings[i].Enabled;Gains[i]=Math.Pow(10,settings[i].Preamp/20);
-            for(int j=0;j<6;j++)Filters[i*6+j]=EqCoefficients.Create(settings[i].Bands[j],sampleRate);
+            for(int j=0;j<MicrophoneEqSettings.InputBandCount;j++)Filters[i*MicrophoneEqSettings.InputBandCount+j]=j<settings[i].Bands.Length?EqCoefficients.Create(settings[i].Bands[j],sampleRate):EqCoefficients.Identity;
         }
     }
 }
@@ -65,10 +71,12 @@ public sealed class MicrophoneEqProcessor
 {
     private MicrophoneEqBank? published,active;
     private readonly MicrophoneEqBank?[] previous=new MicrophoneEqBank?[3];
-    private readonly double[] states=new double[72],oldStates=new double[72];
+    private readonly double[] states=new double[6*MicrophoneEqSettings.InputBandCount*2],oldStates=new double[6*MicrophoneEqSettings.InputBandCount*2];
     private readonly int[] remaining=new int[6];
     private int fadeLength,transitionFrames,blockFrames;
     private bool validRate;
+    public void Reset()
+    {active=null;Array.Clear(previous);Array.Clear(states);Array.Clear(oldStates);Array.Clear(remaining);transitionFrames=0;blockFrames=0;validRate=false;}
     public void Publish(MicrophoneEqBank bank)=>Volatile.Write(ref published,bank);
     public void BeginBlock(int sampleRate)
     {
@@ -81,12 +89,12 @@ public sealed class MicrophoneEqProcessor
         for(int strip=0;strip<3;strip++)
         {
             bool same=active?.SampleRate==sampleRate&&active.Enabled[strip]==incoming!.Enabled[strip]&&active.Gains[strip]==incoming.Gains[strip];
-            if(same)for(int band=0;band<6;band++)if(active!.Filters[strip*6+band]!=incoming!.Filters[strip*6+band]){same=false;break;}
+            if(same)for(int band=0;band<MicrophoneEqSettings.InputBandCount;band++)if(active!.Filters[strip*MicrophoneEqSettings.InputBandCount+band]!=incoming!.Filters[strip*MicrophoneEqSettings.InputBandCount+band]){same=false;break;}
             if(same)continue;
             changed=true;previous[strip]=active?.SampleRate==sampleRate?active:null;
             for(int channel=strip*2;channel<strip*2+2;channel++)
             {
-                int offset=channel*12;Array.Copy(states,offset,oldStates,offset,12);Array.Clear(states,offset,12);remaining[channel]=fadeLength;
+                int offset=channel*MicrophoneEqSettings.InputBandCount*2;Array.Copy(states,offset,oldStates,offset,MicrophoneEqSettings.InputBandCount*2);Array.Clear(states,offset,MicrophoneEqSettings.InputBandCount*2);remaining[channel]=fadeLength;
             }
         }
         active=incoming;if(changed)transitionFrames=fadeLength;
@@ -113,9 +121,9 @@ public sealed class MicrophoneEqProcessor
     {
         if(!bank.Enabled[strip])return sample;
         sample*=bank.Gains[strip];
-        for(int band=0;band<6;band++)
+        for(int band=0;band<MicrophoneEqSettings.InputBandCount;band++)
         {
-            var c=bank.Filters[strip*6+band];int offset=channel*12+band*2;
+            var c=bank.Filters[strip*MicrophoneEqSettings.InputBandCount+band];int offset=channel*MicrophoneEqSettings.InputBandCount*2+band*2;
             double result=c.B0*sample+memory[offset];
             memory[offset]=c.B1*sample-c.A1*result+memory[offset+1];memory[offset+1]=c.B2*sample-c.A2*result;
             if(Math.Abs(memory[offset])<1e-30)memory[offset]=0;

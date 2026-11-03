@@ -1,0 +1,49 @@
+{
+  "Version": "1.38",
+  "CoreTestsPassed": 79,
+  "CoreTestsFailed": 0,
+  "Mixer": {
+    "Success": true,
+    "RestartAndEnabled": true,
+    "EditorView": true,
+    "MissingDeviceDeferred": true,
+    "DeviceParametersIsolated": true,
+    "AllExportedParametersApplied": 1273,
+    "ReconnectReapplied": true,
+    "StableIdCollisionDeferred": true,
+    "SharedHardwareIdDisambiguated": true,
+    "PendingWritesDeferredWithoutLoss": true,
+    "SubmittedWriteSurvivesEarlyDisconnect": true
+  },
+  "OutputBuffers": {
+    "Success": true,
+    "MaxHeader98_64": true,
+    "All40OutputsBitExact": true,
+    "FiveBusSpectra": true,
+    "InputFramesUnchanged": true,
+    "CallbackAllocatedBytes": 0
+  },
+  "NativeAudio": {
+    "Success": true,
+    "SyntheticChannelBypass": true,
+    "CallbackAllocatedBytes": 0,
+    "LiveFrames": 73728,
+    "LiveOutputFrames": 72192,
+    "OutputSpectrumPeak": 0.41443142,
+    "SpectrumPeak": 4.7922134E-05,
+    "BypassMonitoring": true,
+    "SampleRate": 48000,
+    "InputChannels": 34,
+    "OutputChannels": 34,
+    "CallbackFault": 0,
+    "Released": true,
+    "FlatOnly": true
+  },
+  "InstalledUpgradeParameterDifferences": 0,
+  "InstalledInputEqEnableStatesPreserved": true,
+  "InputBands": 10,
+  "NativeOutputBands": 6,
+  "RestartAllSettingsPreserved": true,
+  "InstalledUpgradeDeviceBindingsPreserved": true,
+  "LiveOutputSpectrumVisible": true
+}

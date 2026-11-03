@@ -1,7 +1,13 @@
-﻿using System.Windows;
+using System.Windows;
 namespace Donner.Panel;
 public partial class App : System.Windows.Application
 {
+    private Mutex? instanceMutex;
+    private EventWaitHandle? wakeEvent;
+    private RegisteredWaitHandle? wakeRegistration;
+    protected override void OnExit(ExitEventArgs e)
+    {wakeRegistration?.Unregister(null);wakeEvent?.Dispose();if(instanceMutex is not null){instanceMutex.ReleaseMutex();instanceMutex.Dispose();}base.OnExit(e);}
+
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
@@ -39,6 +45,27 @@ public partial class App : System.Windows.Application
         {
             try{await MicrophoneEqChecks.VerifyAsync(e.Args[1]);Shutdown(0);}
             catch(Exception error){File.WriteAllText(e.Args[1],error.ToString());Shutdown(1);}return;
+        }
+        if(e.Args.Length==2&&e.Args[0]=="--verify-output-buffers")
+        {
+            try{MicrophoneEqChecks.VerifyOutputBuffers(e.Args[1]);Shutdown(0);}catch(Exception error){File.WriteAllText(e.Args[1],error.ToString());Shutdown(1);}return;
+        }
+        if(e.Args.Length==2&&e.Args[0]=="--capture-mixer-configuration")
+        {
+            try{MixerConfigurationExport.Capture(e.Args[1]);Shutdown(0);}catch(Exception error){File.WriteAllText(e.Args[1],error.ToString());Shutdown(1);}return;
+        }
+        if(!e.Args.Contains("--smoke")&&!e.Args.Contains("--reconnect-check"))
+        {
+            string identity=System.Security.Principal.WindowsIdentity.GetCurrent().User?.Value??Environment.UserName;
+            var mutex=new Mutex(false,@"Local\DonnerControlPanel."+identity);bool acquired;
+            try{acquired=mutex.WaitOne(0);}catch(AbandonedMutexException){acquired=true;}
+            if(!acquired)
+            {
+                try{using var signal=EventWaitHandle.OpenExisting(@"Local\DonnerControlPanel.Wake."+identity);signal.Set();}catch(WaitHandleCannotBeOpenedException){}
+                mutex.Dispose();Shutdown(0);return;
+            }
+            instanceMutex=mutex;wakeEvent=new(false,EventResetMode.AutoReset,@"Local\DonnerControlPanel.Wake."+identity);
+            wakeRegistration=ThreadPool.RegisterWaitForSingleObject(wakeEvent,(_,_)=>Dispatcher.BeginInvoke(()=>{if(MainWindow is {} existing){existing.Show();existing.WindowState=WindowState.Normal;existing.Activate();}}),null,Timeout.Infinite,false);
         }
         var window=new MainWindow(e.Args);MainWindow=window;window.Show();
     }

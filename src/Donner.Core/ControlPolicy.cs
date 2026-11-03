@@ -70,10 +70,27 @@ public static class ControlPolicy
     }
     public static void ValidateFormat(Preset preset)
     {
-        if (preset.Version != 1 || string.IsNullOrWhiteSpace(preset.DeviceId) || preset.Settings is null ||
+        if (preset.Version is not (1 or 2) || string.IsNullOrWhiteSpace(preset.DeviceId) || preset.Settings is null ||
             preset.Settings.Length > 32 || preset.Settings.Any(s => s is null ||
             s.Kind is not ("rate" or "buffer" or "volume" or "mute" or "safemode" or "streammode" or "format")))
             throw new InvalidDataException("预设格式不受支持。");
+        if(preset.Version==1&&(preset.Mixer is not null||preset.Application is not null))throw new InvalidDataException("旧版预设不能包含调音台数据。");
+        if(preset.Demo&&(preset.Mixer is not null||preset.Application is not null))throw new InvalidDataException("演示预设不能控制真实调音台。");
+        preset.Mixer?.Validate();preset.Application?.Validate();
+        foreach(var setting in preset.Settings)
+        {
+            bool valid=setting.Kind switch
+            {
+                "volume"=>setting.Direction<=1&&setting.Channel is >0 and <=32&&setting.Value is >=short.MinValue and <=short.MaxValue,
+                "mute"=>setting.Direction<=1&&setting.Channel is >0 and <=32&&setting.Value is 0 or 1,
+                "rate"=>setting.Value is >=8000 and <=768000,
+                "buffer"=>setting.Value is >0 and <=65536,
+                "safemode"=>setting.Value is 0 or 1,
+                "streammode"=>setting.Value is 1 or 2,
+                "format"=>setting.Direction==0&&setting.Channel==0&&setting.Value>0,_=>false
+            };
+            if(!valid)throw new InvalidDataException("预设包含非法设置值。");
+        }
         ValidateName(preset.Name);
         if (preset.Settings.Select(s => $"{s.Kind}:{s.Direction}:{s.Channel}").Distinct().Count() != preset.Settings.Length)
             throw new InvalidDataException("预设包含重复配置项。");
@@ -99,9 +116,7 @@ public sealed class PresetStore
     public void Save(Preset preset)
     {
         ControlPolicy.ValidateFormat(preset);
-        var file=FileName(preset.Name); var temporary=file+".tmp";
-        File.WriteAllText(temporary,System.Text.Json.JsonSerializer.Serialize(preset, new System.Text.Json.JsonSerializerOptions {WriteIndented=true}));
-        File.Move(temporary,file,true);
+        ConfigurationFiles.Save(FileName(preset.Name),preset,ControlPolicy.ValidateFormat);
     }
     public Preset[] ReadAll()
     {
@@ -117,10 +132,7 @@ public sealed class PresetStore
         {
             try
             {
-                if(new FileInfo(file).Length>65536) throw new InvalidDataException("预设文件过大。");
-                var preset=System.Text.Json.JsonSerializer.Deserialize<Preset>(File.ReadAllText(file))
-                    ?? throw new InvalidDataException("空预设文件。");
-                ControlPolicy.ValidateFormat(preset); presets.Add(preset);
+                var preset=ConfigurationFiles.Load<Preset>(file,ControlPolicy.ValidateFormat)??throw new InvalidDataException("空预设文件。");presets.Add(preset);
             }
             catch(Exception e) when(e is System.Text.Json.JsonException or InvalidDataException or IOException or UnauthorizedAccessException)
             {failures.Add($"预设文件无法读取：{Path.GetFileName(file)} · {e.Message}");}
@@ -128,5 +140,12 @@ public sealed class PresetStore
         errors=failures.ToArray();
         return presets.OrderBy(p=>p.Name,StringComparer.Ordinal).ToArray();
     }
-    public void Delete(string name) => File.Delete(FileName(name));
+    public static Preset ImportFile(string path)
+    {
+        if(new FileInfo(path).Length>524288)throw new InvalidDataException("预设文件过大。");
+        try{var preset=System.Text.Json.JsonSerializer.Deserialize<Preset>(File.ReadAllText(path))??throw new InvalidDataException("空预设。");ControlPolicy.ValidateFormat(preset);return preset;}
+        catch(System.Text.Json.JsonException e){throw new InvalidDataException("预设JSON格式无效。",e);}
+    }
+    public static void ExportFile(string path,Preset preset)=>ConfigurationFiles.Save(path,preset,ControlPolicy.ValidateFormat);
+    public void Delete(string name){File.Delete(FileName(name));File.Delete(FileName(name)+".bak");}
 }

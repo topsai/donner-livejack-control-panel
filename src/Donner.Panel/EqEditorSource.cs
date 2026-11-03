@@ -1,4 +1,4 @@
-﻿using Donner.Core;
+using Donner.Core;
 namespace Donner.Panel;
 internal interface IEqEditorSource
 {
@@ -8,13 +8,14 @@ internal interface IEqEditorSource
     string Status {get;}
     bool HasAudio {get;}
     void Maintain();
+    void Invalidate(){}
     void Monitor(bool active,int target){}
     MicrophoneEqSettings Read(int target,int channel);
     void Apply(int target,int channel,bool linked,MicrophoneEqSettings settings);
     void Spectrum(int target,Span<float> values);
-    void Reset(int target,int channel,bool linked)=>Apply(target,channel,linked,MicrophoneEqSettings.Flat() with{Enabled=Read(target,channel).Enabled});
+    void Reset(int target,int channel,bool linked)=>Apply(target,channel,linked,MicrophoneEqSettings.Flat(IsOutput?6:10) with{Enabled=Read(target,channel).Enabled});
 }
-internal sealed class OutputEqSource(Func<string,float> read,Action<string,float> write,Func<int> rate):IEqEditorSource
+internal sealed class OutputEqSource(Func<string,float> read,Action<string,float> write,Func<int> rate,VoicemeeterClient? client=null):IEqEditorSource
 {
     internal event Action<int,bool>? EnabledChanged;
     private readonly Dictionary<(int,int),(long Updated,MicrophoneEqSettings Settings)> cache=[];
@@ -22,10 +23,20 @@ internal sealed class OutputEqSource(Func<string,float> read,Action<string,float
     public bool IsOutput=>true;
     public string[] Targets=>Enumerable.Range(0,5).Select(MixerPanel.BusName).ToArray();
     public int SampleRate=>rate();
-    public string Status=>"输出总线 EQ";
-    public bool HasAudio=>false;
-    public void Maintain(){}
-    public void Spectrum(int target,Span<float> values)=>values.Clear();
+    private MicrophoneEqInsert? monitor;
+    private string? monitorError;
+    private long nextMonitorAttempt;
+    public string Status=>monitorError??(monitor is {Registered:true,MainRegistered:false}?"输出频谱接口已被其他程序占用，输入 EQ 仍可使用。":null)??"输出总线 EQ · 灰色为所选总线的实时频谱";
+    public bool HasAudio=>monitor?.HasOutputAudio==true;
+    public void Maintain()=>monitor?.Maintain();
+    public void Monitor(bool active,int target)
+    {
+        if(client is null||active&&(!client.Connected||Environment.TickCount64<nextMonitorAttempt))return;
+        try{if(active)monitor??=client.InputEq;monitor?.MonitorOutput(active,target);monitorError=null;}
+        catch(IOException e){monitorError=e.Message;nextMonitorAttempt=Environment.TickCount64+2000;}
+    }
+    public void Invalidate()=>cache.Clear();
+    public void Spectrum(int target,Span<float> values){if(monitor is null){values.Clear();return;}monitor.CopyOutputSpectrum(values);}
     private static readonly EqFilter[] nativeTypes=[EqFilter.Bell,EqFilter.Notch,EqFilter.BandPass,EqFilter.LowPass,EqFilter.HighPass,EqFilter.HighShelf,EqFilter.LowShelf];
     public MicrophoneEqSettings Read(int target,int channel)
     {
@@ -41,7 +52,7 @@ internal sealed class OutputEqSource(Func<string,float> read,Action<string,float
     }
     public void Reset(int target,int channel,bool linked)
     {
-        foreach(int side in linked?new[]{0,1}:new[]{channel})Apply(target,side,false,MicrophoneEqSettings.Flat() with{Enabled=Read(target,side).Enabled});
+        foreach(int side in linked?new[]{0,1}:new[]{channel})Apply(target,side,false,MicrophoneEqSettings.Flat(6) with{Enabled=Read(target,side).Enabled});
     }
     public void Apply(int target,int channel,bool linked,MicrophoneEqSettings settings)
     {

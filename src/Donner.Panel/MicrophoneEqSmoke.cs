@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -22,7 +22,7 @@ public partial class MainWindow
                 await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);
                 var field=Visuals<TextBox>(editor).Single(x=>x.Tag?.ToString()=="Frequency");field.Text="120";
                 field.RaiseEvent(new KeyboardFocusChangedEventArgs(Keyboard.PrimaryDevice,Environment.TickCount,field,null){RoutedEvent=Keyboard.LostKeyboardFocusEvent});
-                if(rack.Get(1).Bands[0].Frequency!=120||rack.Get(0).Bands[0].Frequency!=80)throw new Exception("麦克风EQ字段未独立应用。");
+                if(rack.Get(1).Bands[0].Frequency!=120||rack.Get(0).Bands[0].Frequency!=40)throw new Exception("麦克风EQ字段未独立应用。");
                 var before=rack.Get(1).Bands[0];field.Text="NaN";field.RaiseEvent(new KeyboardFocusChangedEventArgs(Keyboard.PrimaryDevice,Environment.TickCount,field,null){RoutedEvent=Keyboard.LostKeyboardFocusEvent});
                 if(rack.Get(1).Bands[0]!=before)throw new Exception("EQ接收了无效数字。");
                 var graph=editor.Graph;
@@ -44,7 +44,7 @@ public partial class MainWindow
         foreach(string corrupt in new[]{"[]","[null,null,null]","not json"})
         {
             File.WriteAllText(path,corrupt);using var fallback=new MicrophoneEqRack(null,path);
-            if(fallback.Get(0).Enabled||fallback.Get(0).Bands[0].Frequency!=80||File.ReadAllText(path)!=corrupt)throw new Exception("损坏EQ配置没有安全回退或被自动覆盖。");
+            if(fallback.Get(0).Enabled||fallback.Get(0).Bands[0].Frequency!=40||File.ReadAllText(path)!=corrupt)throw new Exception("损坏EQ配置没有安全回退或被自动覆盖。");
         }
         File.WriteAllText(Path.Combine(smokeDirectory!,"microphone-eq-ui.json"),JsonSerializer.Serialize(new{Success=true,InputIsolation=true,InvalidInputRejected=true,CurveEdits=true,PersistedAndBypassed=true}));
     }

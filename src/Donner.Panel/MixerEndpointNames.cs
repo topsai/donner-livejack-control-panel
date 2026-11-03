@@ -164,6 +164,26 @@ internal static class MixerEndpointNames
         try{var value=new NAudio.CoreAudioApi.Interfaces.PropVariant{vt=31,pointerValue=pointer};device.Properties.SetValue(PropertyKeys.PKEY_Device_DeviceDesc,value);device.Properties.Commit();}
         finally{Marshal.FreeCoTaskMem(pointer);}
     }
+    internal static NamedEndpoint[] CaptureNames(string storage)
+    {
+        var backups=ReadBackups(Path.Combine(storage,"mixer-endpoint-names.json"));var endpoints=List(storage);
+        return backups.Select(x=>new NamedEndpoint(x.Id,endpoints.FirstOrDefault(e=>e.Id==x.Id)?.Descriptor??x.Applied)).ToArray();
+    }
+    internal static async Task<string> RestoreNamesAsync(string storage,NamedEndpoint[] names)
+    {
+        var endpoints=await Task.Run(()=>List(storage));
+        var changes=names.Select(x=>(Wanted:x,Actual:endpoints.FirstOrDefault(e=>e.Id==x.Id&&e.Active))).Where(x=>x.Actual is not null&&x.Actual.Descriptor!=x.Wanted.Name).Select(x=>new Rename(x.Wanted.Id,x.Actual!.Descriptor,ValidateName(x.Wanted.Name))).ToArray();
+        if(changes.Length==0)return "设备名称已匹配；未连接设备的名称配置保留。";
+        Directory.CreateDirectory(storage);string request=Path.Combine(storage,"endpoint-custom-"+Guid.NewGuid().ToString("N")+".json"),report=request+".txt";
+        try
+        {
+            File.WriteAllText(request,JsonSerializer.Serialize(new RenameRequest(1,changes)));
+            using var identity=WindowsIdentity.GetCurrent();if(new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator))return await Task.Run(()=>ApplyCustomRequest(storage,request));
+            var start=new ProcessStartInfo(Environment.ProcessPath!){UseShellExecute=true,Verb="runas"};start.ArgumentList.Add("--customize-audio-names");start.ArgumentList.Add(request);start.ArgumentList.Add(report);
+            using var process=Process.Start(start)??throw new IOException("未启动名称修改程序。");await process.WaitForExitAsync();return File.Exists(report)?File.ReadAllText(report):"名称修改未完成，原配置已保留。";
+        }
+        finally{if(File.Exists(request))File.Delete(request);if(File.Exists(report))File.Delete(report);}
+    }
     internal static void Show(Window owner,string storage,Action<Window>? opened=null)
     {
         ReadBackups(Path.Combine(storage,"mixer-endpoint-names.json"));

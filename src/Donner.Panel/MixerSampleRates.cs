@@ -14,6 +14,25 @@ internal sealed class MixerSampleRates:Border,IDisposable
     private readonly bool automatic;
     private readonly Button expand=new(){Content="采样率设置",FontSize=11,Padding=new Thickness(7,4,7,4),Margin=new Thickness(8,0,0,0),VerticalAlignment=VerticalAlignment.Center};
     internal FrameworkElement HeaderView {get;}
+    internal event Action? ConfigurationChanged;
+    private readonly Dictionary<string,WindowsRateBinding> desiredFormats=[];
+    private readonly HashSet<string> attemptedFormats=[];
+    internal WindowsRateBinding[] CaptureFormats()=>desiredFormats.Values.ToArray();
+    internal void RestoreFormats(WindowsRateBinding[] formats)
+    {
+        desiredFormats.Clear();attemptedFormats.Clear();foreach(var format in formats)desiredFormats[format.Id]=format;
+        if(automatic)_=RefreshAsync();
+    }
+    private async Task RestoreAvailableFormats()
+    {
+        foreach(var id in attemptedFormats.Where(id=>!endpoints.Any(x=>x.Id==id)).ToArray())attemptedFormats.Remove(id);
+        foreach(var endpoint in endpoints)
+        {
+            if(!desiredFormats.TryGetValue(endpoint.Id,out var desired)){desiredFormats[endpoint.Id]=new(endpoint.Id,endpoint.Name,endpoint.Capture,endpoint.DefaultRate);continue;}
+            if(desired.Rate==endpoint.DefaultRate||!automatic||busy||!attemptedFormats.Add(endpoint.Id))continue;
+            status.Text=await AudioEndpointFormats.ApplyAsync(endpoint.Id,desired.Rate);
+        }
+    }
     private bool expanded,reading,hasWindowsSnapshot;
     private string? windowsError;
     internal bool IsExpanded
@@ -88,7 +107,7 @@ internal sealed class MixerSampleRates:Border,IDisposable
         button.Click+=async(_,_)=>
         {
             if(busy||disposed)return;busy=true;editor.IsEnabled=false;status.Text="正在应用并检查…";
-            try{status.Text=await apply();}
+            try{status.Text=await apply();ConfigurationChanged?.Invoke();}
             catch(Exception e){status.Text=e.Message;}
             finally{busy=false;if(!disposed){editor.IsEnabled=true;await RefreshAsync();}}
         };
@@ -119,7 +138,7 @@ internal sealed class MixerSampleRates:Border,IDisposable
         try
         {
             var result=await Task.Run(readWindows);
-            if(disposed)return;endpoints=result;hasWindowsSnapshot=true;windowsError=null;summary.ToolTip=null;Refresh();
+            if(disposed)return;bool changed=!endpoints.Select(x=>(x.Id,x.DefaultRate)).SequenceEqual(result.Select(x=>(x.Id,x.DefaultRate)));endpoints=result;if(changed)ConfigurationChanged?.Invoke();hasWindowsSnapshot=true;windowsError=null;summary.ToolTip=null;await RestoreAvailableFormats();Refresh();
         }
         catch(Exception error){if(!disposed){windowsError=error.Message;summary.ToolTip=error.Message;Refresh();}}
         finally{reading=false;}
@@ -166,7 +185,11 @@ internal sealed class MixerSampleRates:Border,IDisposable
             var combo=RateCombo(AudioEndpointFormats.Rates);combo.SelectedItem=endpoint.DefaultRate;
             var value=new TextBlock{FontSize=12,VerticalAlignment=VerticalAlignment.Center};endpointValues[endpoint.Id]=value;
             var row=Row(endpoint.Capture?"Windows 录音":"Windows 播放",combo,value);row.ToolTip=endpoint.Name;windowsRows.Children.Add(row);
-            AddButton(row,"应用 Windows",()=>AudioEndpointFormats.ApplyAsync(endpoint.Id,SelectedRate(combo)));
+            AddButton(row,"应用 Windows",async()=>
+            {
+                uint rate=SelectedRate(combo);var result=await AudioEndpointFormats.ApplyAsync(endpoint.Id,rate);
+                var actual=await Task.Run(readWindows);if(actual.Any(x=>x.Id==endpoint.Id&&x.DefaultRate==rate)){desiredFormats[endpoint.Id]=new(endpoint.Id,endpoint.Name,endpoint.Capture,rate);attemptedFormats.Remove(endpoint.Id);}return result;
+            });
             AddButton(row,"声音属性",()=>{AudioEndpointFormats.OpenSoundProperties(endpoint.Capture);return Task.FromResult("在声音面板选择“"+endpoint.Name+"”→ 属性 → 高级，修改默认格式后返回查看回读。");});
         }
     }

@@ -45,6 +45,11 @@ internal static class MixerSampleRatesSmoke
             slow.IsExpanded=true;if(slow.Visibility!=System.Windows.Visibility.Visible)throw new Exception("采样率设置无法展开。");
             slow.IsExpanded=false;if(slow.Visibility!=System.Windows.Visibility.Collapsed)throw new Exception("收起后仍占用采样率区域。");
         }
+        using(var rates=new MixerSampleRates(new FakeMixer(),()=>new DeviceSnapshot(),_=>Task.CompletedTask,false,()=>[new("livejack-id","Livejack",true,48000,48000,24,2)]))
+        {
+            rates.RestoreFormats([new("livejack-id","Livejack",true,44100)]);await rates.RefreshAsync();
+            if(rates.CaptureFormats().Single().Rate!=44100)throw new Exception("实际值覆盖了待恢复Windows格式。");
+        }
         var client=new FakeMixer{DelayWrite=true};var hardwareWrites=0;
         using var control=new MixerSampleRates(client,()=>new DeviceSnapshot{Connected=true,SampleRate=44100,SampleRates=[44100,48000]},_=>{hardwareWrites++;return Task.CompletedTask;},false);
         control.Refresh();

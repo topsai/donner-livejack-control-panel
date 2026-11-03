@@ -6,19 +6,14 @@ public sealed record MixerSettings(bool Enabled=false)
 {
     public static MixerSettings Load(string path)
     {
-        if(!File.Exists(path))return new();
-        try{return JsonSerializer.Deserialize<MixerSettings>(File.ReadAllText(path))??throw new InvalidDataException("调音台设置为空。");}
-        catch(JsonException e){throw new InvalidDataException("调音台设置损坏，已保持关闭。",e);}
+        return ConfigurationFiles.Load<MixerSettings>(path,_=>{})??new();
     }
-    public void Save(string path)
-    {
-        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
-        var temporary=path+".tmp";File.WriteAllText(temporary,JsonSerializer.Serialize(this));File.Move(temporary,path,true);
-    }
+    public void Save(string path)=>ConfigurationFiles.Save(path,this,_=>{});
 }
 
 public static class MixerRules
 {
+    public static string[] PersistentParameters=>ranges.Keys.OrderBy(x=>x,StringComparer.Ordinal).Append("Option.sr").ToArray();
     public static readonly string[] Routes=["A1","A2","A3","B1","B2"];
     private static readonly Dictionary<string,(float Min,float Max,bool Integer)> ranges=Build();
     private static Dictionary<string,(float,float,bool)> Build()
@@ -36,14 +31,14 @@ public static class MixerRules
             {
                 var p=$"Bus[{i}].EQ.channel[{channel}].cell[{cell}].";
                 r[p+"on"]=(0,1,true);r[p+"type"]=(0,6,true);r[p+"f"]=(20,20000,false);
-                r[p+"gain"]=(-12,12,false);r[p+"q"]=(1,100,false);
+                r[p+"gain"]=(-12,12,false);r[p+"q"]=(.1f,100,false);
             }
         }
         return r;
     }
     public static void Validate(string parameter,float value)
     {
-        if(parameter=="Option.sr"&&new float[]{44100,48000,88200,96000,176400,192000}.Contains(value))return;
+        if(parameter=="Option.sr"&&new float[]{0,44100,48000,88200,96000,176400,192000}.Contains(value))return;
         if(parameter=="Command.Restart"&&value==1)return;
         if(!ranges.TryGetValue(parameter,out var r)||!float.IsFinite(value)||value<r.Min||value>r.Max||(r.Integer&&value!=MathF.Round(value)))
             throw new InvalidDataException("调音台参数或数值不受支持："+parameter);

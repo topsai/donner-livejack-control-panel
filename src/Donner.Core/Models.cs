@@ -43,8 +43,17 @@ public sealed record DeviceSnapshot
     public Dictionary<string,string> Diagnostics { get; init; } = [];
 }
 public sealed record Setting(string Kind, uint Direction = 0, uint Channel = 0, int Value = 0);
-public sealed record Preset(int Version, string Name, string DeviceId, bool Demo, bool Linked, Setting[] Settings);
+public sealed record Preset(int Version, string Name, string DeviceId, bool Demo, bool Linked, Setting[] Settings, MixerConfiguration? Mixer=null,ApplicationConfiguration? Application=null);
 public sealed record OperationResult(string Operation, bool Success, string Message);
 public sealed record HostRequest(string Id, string Operation, string? ApiPath = null, Setting[]? Settings = null);
 public sealed record HostReply(string Id, bool Success, string Message, DeviceSnapshot? Snapshot = null,
     OperationResult[]? Results = null);
+
+public sealed record NamedEndpoint(string Id,string Name);
+public sealed record ApplicationConfiguration(bool Levels,bool Startup,Dictionary<string,int> Percents,NamedEndpoint[] Names)
+{
+    public void Validate()
+    {
+        if(Percents is null||Percents.Count>256||Percents.Any(x=>x.Key.Length>512||x.Value is <0 or >100)||Names is null||Names.Length>128||Names.Any(x=>x is null||string.IsNullOrWhiteSpace(x.Id)||x.Id.Length>256||string.IsNullOrWhiteSpace(x.Name)||x.Name.Length>120||x.Name.Any(char.IsControl))||Names.Select(x=>x.Id).Distinct().Count()!=Names.Length)throw new InvalidDataException("应用预设无效。");
+    }
+}
