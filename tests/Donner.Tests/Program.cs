@@ -283,6 +283,13 @@ Test("主页调音台输出跟随实际声卡总线且保持左右声道",()=>
     MixerRules.Validate("Option.sr",44100);MixerRules.Validate("Command.Restart",1);
     Reject(()=>MixerRules.Validate("Option.sr",45000));Reject(()=>MixerRules.Validate("Command.Restart",0));
 });
+Test("调音台推子可吸附归零且保留键盘微调",()=>
+{
+    Check(MixerFaderValue.Pointer(-.7)==0&&MixerFaderValue.Pointer(.7)==0,"鼠标经过零点未吸附");
+    Check(MixerFaderValue.Pointer(-12.36)==-12.4&&MixerFaderValue.Pointer(3.26)==3.3,"拖动未按0.1dB量化");
+    Check(MixerFaderValue.Pointer(-100)==-60&&MixerFaderValue.Pointer(100)==12,"推子越界");
+    Reject(()=>MixerFaderValue.Pointer(double.NaN));
+});
 Console.WriteLine($"热插拔结果：{passed} 通过，{failures} 失败");
 return failures==0?0:1;
 

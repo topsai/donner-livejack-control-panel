@@ -76,11 +76,20 @@ internal sealed class MixerPanel:Border,IDisposable
         }
         else box.Children.Add(new TextBlock{Text=input?"虚拟播放输入":"虚拟录音输出",FontSize=11,HorizontalAlignment=HorizontalAlignment.Center,Margin=new Thickness(0,10,0,8)});
         var faderRow=new Grid{Height=94};faderRow.ColumnDefinitions.Add(new());faderRow.ColumnDefinitions.Add(new(){Width=new GridLength(14)});box.Children.Add(faderRow);
-        var slider=new Slider{Orientation=Orientation.Vertical,IsMoveToPointEnabled=true,Minimum=-60,Maximum=12,TickFrequency=.1,SmallChange=.1,LargeChange=1,Height=90,Width=36,Style=(Style)FindResource("ChannelFader")};faderRow.Children.Add(slider);
+        var slider=new Slider{Orientation=Orientation.Vertical,IsMoveToPointEnabled=true,Minimum=-60,Maximum=12,TickFrequency=.1,IsSnapToTickEnabled=true,SmallChange=.1,LargeChange=1,Height=90,Width=36,Style=(Style)FindResource("ChannelFader")};faderRow.Children.Add(slider);
         var meter=new ChannelMeter{Width=10,Height=88,VerticalAlignment=VerticalAlignment.Center};Grid.SetColumn(meter,1);faderRow.Children.Add(meter);
         meters.Add(()=>meter.Peak=client.Level(input,index));
-        var value=new TextBlock{Text="0.0 dB",FontSize=12,HorizontalAlignment=HorizontalAlignment.Center,Margin=new Thickness(0,4,0,4)};box.Children.Add(value);
-        slider.ValueChanged+=(_,_)=>{value.Text=$"{slider.Value:0.0} dB";if(!updating)Queue(prefix+".Gain",(float)slider.Value);};
+        var value=new Button{Content="0.0 dB",Tag=prefix+".Gain.reset",FontSize=12,HorizontalAlignment=HorizontalAlignment.Center,Padding=new Thickness(6,2,6,2),Margin=new Thickness(0,4,0,4),ToolTip="点击数值归零（0 dB 不增不减）；双击推子也可归零。"};box.Children.Add(value);
+        slider.ToolTip="-60 至 +12 dB；靠近 0 dB 自动吸附。双击归零；方向键按 0.1 dB 微调。";
+        void ResetGain(){slider.Focus();slider.Value=0;if(!updating)Queue(prefix+".Gain",0);}
+        value.Click+=(_,_)=>ResetGain();
+        slider.PreviewMouseDoubleClick+=(_,e)=>{if(e.ChangedButton==System.Windows.Input.MouseButton.Left){ResetGain();e.Handled=true;}};
+        slider.ValueChanged+=(_,_)=>
+        {
+            if(!updating&&(slider.IsMouseCaptureWithin||slider.IsMouseOver&&System.Windows.Input.Mouse.LeftButton==System.Windows.Input.MouseButtonState.Pressed))
+            {var snapped=MixerFaderValue.Pointer(slider.Value);if(snapped!=slider.Value)slider.Value=snapped;}
+            value.Content=$"{slider.Value:0.0} dB";if(!updating)Queue(prefix+".Gain",(float)slider.Value);
+        };
         readers.Add(()=>{if(!slider.IsMouseCaptureWithin&&!pending.ContainsKey(prefix+".Gain"))slider.Value=ReadValue(prefix+".Gain");});
         var switches=new WrapPanel{HorizontalAlignment=HorizontalAlignment.Center};box.Children.Add(switches);
         AddCheck(switches,"静音",prefix+".Mute");AddCheck(switches,"单声道",prefix+".Mono");

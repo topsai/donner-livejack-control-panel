@@ -54,21 +54,23 @@ v1.28 将采样率摘要和设置入口移到“调音台”标题旁，收起�
 
 ![调音台采样率设置](docs/images/mixer-rates.png)
 
-### v1.28 调音台截图
+调音台推子的 **-60 至 +12 dB** 是 Banana 的增益范围：0 dB 不增不减，负值衰减，正值放大。v1.29 起拖动靠近零点会吸附；**双击推子或点击下方分贝数值可精确归零**，方向键保持 0.1 dB 微调。归零只修改该通道的增益，不切换静音和路由。
+
+### v1.29 调音台截图
 
 以下截图来自已连接的 Banana，仅只读采集界面，未修改现有配置。
 
 输入混音：
 
-![v1.28 调音台输入混音](docs/images/mixer-inputs.png)
+![v1.29 调音台输入混音](docs/images/mixer-inputs.png)
 
 输出与 EQ：
 
-![v1.28 调音台输出与 EQ](docs/images/mixer-eq.png)
+![v1.29 调音台输出与 EQ](docs/images/mixer-eq.png)
 
 ## 下载与安装
 
-推荐在 [Releases](https://github.com/topsai/donner-livejack-control-panel/releases/latest) 下载 `DonnerControlPanel-v1.28-Setup-win-x64.exe`，双击安装。安装包自带 .NET 运行时和原厂 USB 音频驱动，无需联网或另外下载驱动。
+推荐在 [Releases](https://github.com/topsai/donner-livejack-control-panel/releases/latest) 下载 `DonnerControlPanel-v1.29-Setup-win-x64.exe`，双击安装。安装包自带 .NET 运行时和原厂 USB 音频驱动，无需联网或另外下载驱动。
 
 - 已有兼容的原厂驱动：自动跳过驱动安装。
 - 缺少兼容驱动：先打开内置的原厂驱动安装向导。允许 Windows 管理员授权并完成向导后，安装程序会检查驱动，再安装中文面板。
@@ -120,7 +122,7 @@ v1.28 将采样率摘要和设置入口移到“调音台”标题旁，收起�
 .\build-installer.ps1 -DriverInstaller 'C:\drivers\Donner_UsbAudio_v5.0.0_2021-03-29_setup.exe'
 ```
 
-脚本验证原厂签名与 SHA-256，输出 `dist\DonnerControlPanel-v1.28-Setup-win-x64.exe`。源码仓库不保存驱动二进制。安装包内驱动为原厂 5.0.0 版本（SHA-256：`12EF3F0F517B2F00A7EBBA3DBC0CAC978E4A71ECE8599B31FFE853304DD147F0`），保持原文件；安装过程交由原厂向导执行。
+脚本验证原厂签名与 SHA-256，输出 `dist\DonnerControlPanel-v1.29-Setup-win-x64.exe`。源码仓库不保存驱动二进制。安装包内驱动为原厂 5.0.0 版本（SHA-256：`12EF3F0F517B2F00A7EBBA3DBC0CAC978E4A71ECE8599B31FFE853304DD147F0`），保持原文件；安装过程交由原厂向导执行。
 
 安装脚本的简体中文语言文件来自 [Inno Setup 仓库](https://github.com/jrsoftware/issrc/blob/main/Files/Languages/ChineseSimplified.isl)，保留作者署名。
 
@@ -145,7 +147,7 @@ dotnet run --project tests/Donner.Tests -c Release
 | `src/Donner.Core` | 能力检查、音量映射、预设、设备状态与进程通信 |
 | `src/Donner.Host` | 隔离进程调用原厂控制 API，检测设备并读写设置 |
 | `src/Donner.Panel` | WPF 中文界面、托盘、自动启动与面板说明 |
-| `tests/Donner.Tests` | 69 项核心回归检查，无第三方测试框架 |
+| `tests/Donner.Tests` | 70 项核心回归检查，无第三方测试框架 |
 
 源码仓库与便携 ZIP 不包含原厂驱动；统一安装 EXE 包含未经修改的原厂驱动安装程序。品牌名称用于说明兼容设备；此项目非 Donner 官方产品。
 
