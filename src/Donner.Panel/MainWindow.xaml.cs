@@ -53,7 +53,7 @@ public partial class MainWindow : Window
         StreamModeCombo.ItemsSource=new[]{new DriverOption(1,"按需开启"),new DriverOption(2,"持续开启")};
         OutputFormatCombo.SelectionChanged+=(_,_)=>{if(!rendering&&OutputFormatCombo.SelectedItem is DriverOption option)selectedFormat=option.Value;};
         StreamModeCombo.SelectionChanged+=(_,_)=>{if(!rendering&&StreamModeCombo.SelectedItem is DriverOption option)selectedStreamMode=option.Value;};
-        Title="Donner 中文控制面板 · v1.22 · topsai (范斯特洛夫斯基)";
+        Title="Donner 中文控制面板 · v1.23 · topsai (范斯特洛夫斯基)";
         AboutVersion.Text="版本 "+typeof(MainWindow).Assembly.GetName().Version?.ToString(3);
         var smoke=Array.IndexOf(args,"--smoke");
         smokeDirectory=smoke>=0 && smoke+1<args.Length?Path.GetFullPath(args[smoke+1]):null;
@@ -67,7 +67,7 @@ public partial class MainWindow : Window
         presets=new PresetStore(Path.Combine(storage,"presets"));
         var start=new ProcessStartInfo(Path.Combine(AppContext.BaseDirectory,"Donner.Host.exe"));
         client=new HostClient(start);session=new DeviceSession(client.SendAsync);
-        InitializeMeters();
+        InitializeMeters();InitializeMixer();
         RateCombo.SelectionChanged+=(_,_)=>{if(!rendering&&RateCombo.SelectedItem is RateOption rate)selection.Rate=rate.Value;};
         BufferCombo.SelectionChanged+=(_,_)=>{if(!rendering&&BufferCombo.SelectedItem is uint size)selection.Buffer=size;};
         Pages.SelectionChanged+=(_,_)=>UpdatePageMenu();
@@ -221,7 +221,7 @@ public partial class MainWindow : Window
         var muteLabel=MuteOutputs(d) is {Length:>0} outputs&&outputs.All(c=>c.Muted==true)?"取消输出静音":"输出全部静音";
         MuteAllButton.Content=muteLabel;
         if(trayMute is not null){trayMute.Visible=mute;trayMute.Enabled=mute;trayMute.Text=muteLabel;}
-        if(Feedback.Text.StartsWith("快捷键："))Feedback.Text="快捷键：F5 重新检测 · Ctrl+S 保存预设"+(mute?" · Ctrl+M 切换输出静音":"");
+        if(Feedback.Text.StartsWith("快捷键："))Feedback.Text="快捷键：F5 重连 · Ctrl+S 保存预设"+(mute?" · Ctrl+M 切换输出静音":"");
         var channels=d.Connected&&d.Channels.Any(c=>DeviceCapabilities.HasVolume(c)||DeviceCapabilities.HasMute(c));
         ChannelHeader.Visibility=ChannelsPanel.Visibility=channels?Visibility.Visible:Visibility.Collapsed;
     }
@@ -247,7 +247,7 @@ public partial class MainWindow : Window
             try
             {
                 Directory.CreateDirectory(reconnectCheckDirectory);
-                File.WriteAllText(Path.Combine(reconnectCheckDirectory,"state.json"),JsonSerializer.Serialize(new {Version="1.22",ProcessId=Environment.ProcessId,Updated=DateTimeOffset.Now,d.Connected,d.Demo,d.Status,d.SampleRate,d.BufferSize,DeviceChanges=deviceChanges,NotificationRegistered=notifications is not null},new JsonSerializerOptions {WriteIndented=true}));
+                File.WriteAllText(Path.Combine(reconnectCheckDirectory,"state.json"),JsonSerializer.Serialize(new {Version="1.23",ProcessId=Environment.ProcessId,Updated=DateTimeOffset.Now,d.Connected,d.Demo,d.Status,d.SampleRate,d.BufferSize,DeviceChanges=deviceChanges,NotificationRegistered=notifications is not null},new JsonSerializerOptions {WriteIndented=true}));
             }
             catch(IOException){}
         }
@@ -497,6 +497,7 @@ public partial class MainWindow : Window
         {
             Directory.CreateDirectory(smokeDirectory!);await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);
             SaveImage("device.png");
+            await VerifyMixer();
             var live=session.Snapshot;
             if(live.Connected)
             {

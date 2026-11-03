@@ -225,6 +225,27 @@ Test("快速拔插通知使旧连接失效并丢弃正在返回的旧状态",()=
 Test("拔插通知不退出演示模式",()=>{
     var session=new DeviceSession(_=>throw new Exception("不应访问硬件"));session.SetDemo(true);session.InvalidateHardware();Check(session.Snapshot.Demo,"通知破坏演示模式");
 });
+Test("调音台默认关闭，启停持久化且损坏配置不自动启用",()=>
+{
+    var path=Path.Combine(temp,"mixer.json");Check(!MixerSettings.Load(path).Enabled,"调音台必须默认关闭");
+    new MixerSettings(true).Save(path);Check(MixerSettings.Load(path).Enabled,"启用设置未保存");
+    new MixerSettings(false).Save(path);Check(!MixerSettings.Load(path).Enabled,"关闭设置未保存");
+    File.WriteAllText(path,"bad json");Reject(()=>MixerSettings.Load(path));
+});
+Test("Banana参数只允许已支持的条带、路由和有效值",()=>
+{
+    MixerRules.Validate("Strip[0].Gain",-60);MixerRules.Validate("Bus[4].Gain",12);
+    Reject(()=>MixerRules.Validate("Strip[5].Gain",0));Reject(()=>MixerRules.Validate("Strip[0].A4",1));
+    Reject(()=>MixerRules.Validate("Strip[3].Comp",1));Reject(()=>MixerRules.Validate("Strip[0].Mute",.5f));
+    Reject(()=>MixerRules.Validate("Bus[0].Gain",float.NaN));Reject(()=>MixerRules.Validate("Bus[0].Gain",13));
+    MixerRules.Validate("Bus[3].EQ.channel[1].cell[5].f",20000);
+    Reject(()=>MixerRules.Validate("Bus[3].EQ.channel[1].cell[6].f",100));
+});
+Test("Banana电平和EQ左右联动保持声道及总线索引",()=>
+{
+    Check(new[]{0,2,4,6,14}.SequenceEqual(Enumerable.Range(0,5).Select(MixerRules.InputLevelIndex)),"电平映射错误");
+    Check(MixerRules.EqKeys(3,0,"gain",true).SequenceEqual(new[]{"Bus[3].EQ.channel[0].cell[0].gain","Bus[3].EQ.channel[1].cell[0].gain"}),"EQ联动写错目标");
+});
 Console.WriteLine($"热插拔结果：{passed} 通过，{failures} 失败");
 return failures==0?0:1;
 
