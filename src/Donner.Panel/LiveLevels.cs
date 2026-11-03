@@ -56,19 +56,25 @@ internal sealed class LiveLevels : IDisposable
         }
         public void Dispose(){Available=false;try {capture.StopRecording();}finally {try {capture.Dispose();}finally {device.Dispose();}}}
     }
-    private Source? input,output;
+    private readonly BackgroundMeterSource<Source> inputSource,outputSource;
+    // Keep these snapshot properties free of COM work; only source creation/cleanup touches drivers.
+    private Source? input=>inputSource.Current;
+    private Source? output=>outputSource.Current;
     private readonly bool captureInput,captureOutput;
     private long nextRetry=Environment.TickCount64+3000;
     public bool InputAvailable=>input?.Available==true;
     public bool OutputAvailable=>output?.Available==true;
     internal bool CapturesOutput=>captureOutput;
+    internal Task WaitForSourcesAsync()=>Task.WhenAll(inputSource.Pending,outputSource.Pending);
     public int InputPackets=>input is {} source?Volatile.Read(ref source.Packets):0;
     public int OutputPackets=>output is {} source?Volatile.Read(ref source.Packets):0;
-    public string? Error {get;private set;}
+    public string? Error=>inputSource.Error??outputSource.Error??input?.Error??output?.Error;
     public LiveLevels(bool captureInput=true,bool captureOutput=true)
     {
         this.captureInput=captureInput;this.captureOutput=captureOutput;
-        if(captureInput)input=Open(DataFlow.Capture,false);if(captureOutput)output=Open(DataFlow.Render,true);
+        inputSource=new(()=>Open(DataFlow.Capture,false),source=>source.Available);
+        outputSource=new(()=>Open(DataFlow.Render,true),source=>source.Available);
+        if(captureInput)inputSource.Request();if(captureOutput)outputSource.Request();
     }
     private Source? Open(DataFlow flow,bool loopback)
     {
@@ -85,22 +91,19 @@ internal sealed class LiveLevels : IDisposable
                 }
                 if(matches.Count==1){var device=matches[0];matches.Clear();return new Source(device,loopback);}
             }
-            catch(Exception error) when(error is System.Runtime.InteropServices.COMException or InvalidOperationException or UnauthorizedAccessException or InvalidDataException or NotSupportedException)
-            {Error=error.Message;}
             finally {foreach(var endpoint in matches)endpoint.Dispose();}
             return null;
     }
     public void RetryStopped()
     {
         if(Environment.TickCount64<nextRetry)return;nextRetry=Environment.TickCount64+3000;
-        void Release(Source? source){try {source?.Dispose();}catch(Exception error) when(error is System.Runtime.InteropServices.COMException or InvalidOperationException or UnauthorizedAccessException) {}}
-        if(captureInput&&!InputAvailable){Release(input);input=Open(DataFlow.Capture,false);}
-        if(captureOutput&&!OutputAvailable){Release(output);output=Open(DataFlow.Render,true);}
+        if(captureInput)inputSource.Request();
+        if(captureOutput)outputSource.Request();
     }
     public float[] Read()
     {
         var i=input?.Read()??(0f,0f);var o=output?.Read()??(0f,0f);
         return [i.Item1,i.Item2,o.Item1,o.Item2];
     }
-    public void Dispose(){var i=input;var o=output;input=output=null;try {i?.Dispose();}finally {o?.Dispose();}}
+    public void Dispose(){inputSource.Dispose();outputSource.Dispose();}
 }

@@ -25,7 +25,27 @@ internal static class MixerSampleRatesSmoke
     }
     internal static async Task VerifyAsync()
     {
-        Verify();var client=new FakeMixer{DelayWrite=true};var hardwareWrites=0;
+        Verify();
+        using(var release=new ManualResetEventSlim(false))
+        {
+            int reads=0;var started=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            var clock=System.Diagnostics.Stopwatch.StartNew();
+            using var slow=new MixerSampleRates(new FakeMixer(),()=>new DeviceSnapshot(),_=>Task.CompletedTask,false,()=>{Interlocked.Increment(ref reads);started.TrySetResult();if(!release.Wait(4000))throw new IOException("测试读取超时");return [];});
+            var first=slow.RefreshAsync();
+            if(clock.ElapsedMilliseconds>500)throw new Exception("采样率查询阻塞了界面调用。");
+            try
+            {
+                await started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+                bool serviced=false;await System.Windows.Threading.Dispatcher.CurrentDispatcher.InvokeAsync(()=>serviced=true,System.Windows.Threading.DispatcherPriority.Input);
+                await slow.RefreshAsync();
+                if(!serviced||reads!=1||first.IsCompleted)throw new Exception("慢查询期间界面不能响应或查询发生重叠。");
+            }
+            finally{release.Set();}
+            await first;
+            slow.IsExpanded=true;if(slow.Visibility!=System.Windows.Visibility.Visible)throw new Exception("采样率设置无法展开。");
+            slow.IsExpanded=false;if(slow.Visibility!=System.Windows.Visibility.Collapsed)throw new Exception("收起后仍占用采样率区域。");
+        }
+        var client=new FakeMixer{DelayWrite=true};var hardwareWrites=0;
         using var control=new MixerSampleRates(client,()=>new DeviceSnapshot{Connected=true,SampleRate=44100,SampleRates=[44100,48000]},_=>{hardwareWrites++;return Task.CompletedTask;},false);
         control.Refresh();
         if(client.Writes.Count!=0||hardwareWrites!=0)throw new Exception("初始化或刷新修改了采样率。");

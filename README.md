@@ -36,7 +36,7 @@ A1–A3 的录音端点标为“监听总线录音”；额外播放通道标为
 
 ### 采样率、自定义名称与主页电平
 
-调音台顶部直接显示 Windows 录音、Windows 播放、Banana 首选和 Donner 实际采样率。展开“采样率设置”可逐项修改：
+调音台顶部直接显示 Windows 录音、Windows 播放、Banana 首选和 Donner 实际采样率。点击标题旁的“采样率设置”可展开编辑区并逐项修改：
 
 - Windows 两项：修改 Livejack 录音/播放端点的默认格式，需要管理员授权，成功时检查 Windows 音频引擎的回读。
 - Banana 首选：点击“保存首选”，再按需点击“重启引擎”；首选值与声卡实际工作速率分开展示。
@@ -48,23 +48,27 @@ A1–A3 的录音端点标为“监听总线录音”；额外播放通道标为
 
 Banana 接管 Livejack 输出时，主页从实际对应的 A1/A2/A3 总线读取左右声道电平，避免独占输出使 Windows 回环采集失效。不会将其他声卡的总线或某一通道的最大值冒充左右输出。未能唯一对应总线时不显示错误的替代读数；关闭调音台后恢复原来的 Windows 采集方式。电平不包含声卡的模拟直通监听。
 
+v1.28 将采样率摘要和设置入口移到“调音台”标题旁，收起时不再占用单独区域。Windows 格式与设备识别查询、设备名称窗口的枚举与保存、电平采集的打开/重试/释放改在后台执行；同类查询不重叠，隐藏页面暂停不必要的刷新。设备写入和预设操作会等待此前的采集资源清理完毕。
+
+本机一次实测：Windows 查询耗时约 1.88 秒期间，界面调度最大间隔约 32 毫秒；[验证记录](docs/verification/v1.28-responsiveness.json)。
+
 ![调音台采样率设置](docs/images/mixer-rates.png)
 
-### v1.27 调音台截图
+### v1.28 调音台截图
 
 以下截图来自已连接的 Banana，仅只读采集界面，未修改现有配置。
 
 输入混音：
 
-![v1.27 调音台输入混音](docs/images/mixer-inputs.png)
+![v1.28 调音台输入混音](docs/images/mixer-inputs.png)
 
 输出与 EQ：
 
-![v1.27 调音台输出与 EQ](docs/images/mixer-eq.png)
+![v1.28 调音台输出与 EQ](docs/images/mixer-eq.png)
 
 ## 下载与安装
 
-推荐在 [Releases](https://github.com/topsai/donner-livejack-control-panel/releases/latest) 下载 `DonnerControlPanel-v1.27-Setup-win-x64.exe`，双击安装。安装包自带 .NET 运行时和原厂 USB 音频驱动，无需联网或另外下载驱动。
+推荐在 [Releases](https://github.com/topsai/donner-livejack-control-panel/releases/latest) 下载 `DonnerControlPanel-v1.28-Setup-win-x64.exe`，双击安装。安装包自带 .NET 运行时和原厂 USB 音频驱动，无需联网或另外下载驱动。
 
 - 已有兼容的原厂驱动：自动跳过驱动安装。
 - 缺少兼容驱动：先打开内置的原厂驱动安装向导。允许 Windows 管理员授权并完成向导后，安装程序会检查驱动，再安装中文面板。
@@ -116,7 +120,7 @@ Banana 接管 Livejack 输出时，主页从实际对应的 A1/A2/A3 总线读�
 .\build-installer.ps1 -DriverInstaller 'C:\drivers\Donner_UsbAudio_v5.0.0_2021-03-29_setup.exe'
 ```
 
-脚本验证原厂签名与 SHA-256，输出 `dist\DonnerControlPanel-v1.27-Setup-win-x64.exe`。源码仓库不保存驱动二进制。安装包内驱动为原厂 5.0.0 版本（SHA-256：`12EF3F0F517B2F00A7EBBA3DBC0CAC978E4A71ECE8599B31FFE853304DD147F0`），保持原文件；安装过程交由原厂向导执行。
+脚本验证原厂签名与 SHA-256，输出 `dist\DonnerControlPanel-v1.28-Setup-win-x64.exe`。源码仓库不保存驱动二进制。安装包内驱动为原厂 5.0.0 版本（SHA-256：`12EF3F0F517B2F00A7EBBA3DBC0CAC978E4A71ECE8599B31FFE853304DD147F0`），保持原文件；安装过程交由原厂向导执行。
 
 安装脚本的简体中文语言文件来自 [Inno Setup 仓库](https://github.com/jrsoftware/issrc/blob/main/Files/Languages/ChineseSimplified.isl)，保留作者署名。
 

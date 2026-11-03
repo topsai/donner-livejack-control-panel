@@ -57,8 +57,21 @@ public partial class MainWindow
         File.WriteAllText(MixerSettingsPath,"invalid json");LoadMixerPreference();UpdateMixer();
         if(mixerEnabled||MixerEnableCheck.IsChecked==true)throw new Exception("损坏设置自动启用调音台。");
         File.Delete(MixerSettingsPath);
-        var customChecks=MixerEndpointNamesSmoke.Verify();await MixerSampleRatesSmoke.VerifyAsync();
+        var cleanupGate=new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        TrackMeterCleanup(cleanupGate.Task);var waitingForOldMeter=StopMetersAndWaitAsync();
+        try{if(waitingForOldMeter.IsCompleted)throw new Exception("已离开主页的旧采集任务逃过设备写入等待。");}
+        finally{cleanupGate.TrySetResult();}
+        await waitingForOldMeter;
+        var customChecks=MixerEndpointNamesSmoke.Verify();await MixerSampleRatesSmoke.VerifyAsync();await MixerHomeMetersSmoke.VerifyAsync();await BackgroundMeterSourceSmoke.VerifyAsync();
         File.WriteAllText(Path.Combine(smokeDirectory!,"mixer-extended-checks.json"),JsonSerializer.Serialize(new{Success=true,CustomNames=customChecks,SampleRates=true}));
+        var nameDialogClock=System.Diagnostics.Stopwatch.StartNew();
+        MixerEndpointNames.Show(this,storage,window=>
+        {
+            var close=new DispatcherTimer{Interval=TimeSpan.FromMilliseconds(250)};
+            close.Tick+=(_,_)=>{close.Stop();window.Close();};close.Start();
+        });
+        if(nameDialogClock.ElapsedMilliseconds>1500)throw new Exception("设备名称窗口的后台读取阻塞了打开或关闭操作。");
+        File.WriteAllText(Path.Combine(smokeDirectory!,"name-dialog-responsiveness.json"),JsonSerializer.Serialize(new{OpenAndCloseMilliseconds=nameDialogClock.Elapsed.TotalMilliseconds}));
         var namesBackup=Path.Combine(storage,"mixer-endpoint-names.json");
         foreach(var bad in new[]{"invalid json","[null]"})
         {
@@ -134,14 +147,14 @@ public partial class MainWindow
             Width=1100;Height=820;await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);
             livePanel.Poll(true);
             if(!livePanel.ControlsEnabled)throw new IOException("真实 Banana 参数读取失败，未生成已连接截图。");
-            var rates=Visuals<Expander>(livePanel).Single();rates.IsExpanded=true;
+            var rates=Visuals<MixerSampleRates>(livePanel).Single();await rates.RefreshAsync();await VerifyNativeRateResponsiveness(rates);rates.IsExpanded=true;
             await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);SaveImage("mixer-live-rates.png");rates.IsExpanded=false;
             await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);SaveImage("mixer-live-inputs.png");
             Visuals<TabControl>(livePanel).Single().SelectedIndex=1;
             await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);livePanel.Poll(true);
             Visuals<ScrollViewer>(Pages).First().ScrollToTop();await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);
             SaveImage("mixer-live-eq.png");
-            mixerPanel=livePanel;Pages.SelectedIndex=0;MeterCheck.IsChecked=true;nextMixerMeterRoute=0;
+            mixerPanel=livePanel;Pages.SelectedIndex=0;MeterCheck.IsChecked=true;nextMixerMeterRoute=0;await RefreshMixerHomeOutputIdentityAsync();
             await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);UpdateMeters();
             var routed=ReadMixerHomeOutput(out var meterAvailable,out var outputLeft,out var outputRight);
             File.WriteAllText(Path.Combine(smokeDirectory!,"mixer-home-meters.json"),JsonSerializer.Serialize(new{MappedToLivejack=routed,OutputAvailable=meterAvailable,Bus=mixerOutputBus,OutputLeft=outputLeft,OutputRight=outputRight,LoopbackCaptureRequested=levels?.CapturesOutput},new JsonSerializerOptions{WriteIndented=true}));
@@ -149,7 +162,7 @@ public partial class MainWindow
             Width=900;Height=620;await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);SaveImage("home-with-mixer.png");
             var held=levels;levels=null;MeterCheck.IsChecked=false;
             try{UpdateMeters();if(meterViews.Values.Any(x=>x.Visibility==Visibility.Visible))throw new IOException("关闭电平后仍显示调音台输出。");}
-            finally{held?.Dispose();}
+            finally{held?.Dispose();if(held is not null)await held.WaitForSourcesAsync();}
             MeterCheck.IsChecked=true;StopMeters();mixerPanel=null;
             writes=client.WriteAttempts;
             if(writes!=0)throw new IOException("真实截图发生参数写入尝试，已阻止。");
@@ -157,7 +170,7 @@ public partial class MainWindow
         catch(Exception e) when(e is IOException or System.ComponentModel.Win32Exception){error=e.Message;}
         finally
         {
-            StopMeters();mixerPanel=null;MixerSlot.Content=null;mixerEnabled=false;UpdateMixerNavigation();Width=width;Height=height;Feedback.Text=feedback;
+            await StopMetersAndWaitAsync();mixerPanel=null;MixerSlot.Content=null;mixerEnabled=false;UpdateMixerNavigation();Width=width;Height=height;Feedback.Text=feedback;
             File.WriteAllText(Path.Combine(smokeDirectory!,"mixer-live-check.json"),JsonSerializer.Serialize(new{Connected=connected,WriteAttempts=writes,AudioPathTested=false,Error=error},new JsonSerializerOptions{WriteIndented=true}));
         }
     }

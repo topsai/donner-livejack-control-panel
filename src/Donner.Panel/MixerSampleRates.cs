@@ -10,9 +10,20 @@ namespace Donner.Panel;
 internal sealed class MixerSampleRates:Border,IDisposable
 {
     private readonly IMixerClient client;
+    private readonly Func<AudioEndpointFormats.Endpoint[]> readWindows;
+    private readonly bool automatic;
+    private readonly Button expand=new(){Content="采样率设置",FontSize=11,Padding=new Thickness(7,4,7,4),Margin=new Thickness(8,0,0,0),VerticalAlignment=VerticalAlignment.Center};
+    internal FrameworkElement HeaderView {get;}
+    private bool expanded,reading,hasWindowsSnapshot;
+    private string? windowsError;
+    internal bool IsExpanded
+    {
+        get=>expanded;
+        set{if(expanded==value)return;expanded=value;Visibility=value?Visibility.Visible:Visibility.Collapsed;expand.Content=value?"收起采样率":"采样率设置";if(value&&automatic)_=RefreshAsync();}
+    }
     private readonly Func<DeviceSnapshot> snapshot;
     private readonly Func<uint,Task> setHardwareRate;
-    private readonly TextBlock summary=new(){FontSize=12,TextWrapping=TextWrapping.Wrap};
+    private readonly TextBlock summary=new(){FontSize=11,TextWrapping=TextWrapping.Wrap,VerticalAlignment=VerticalAlignment.Center};
     private readonly TextBlock status=new(){FontSize=12,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,5,0,0)};
     private readonly TextBlock hardwareValue=new(){FontSize=12,VerticalAlignment=VerticalAlignment.Center};
     private readonly TextBlock bananaValue=new(){FontSize=12,VerticalAlignment=VerticalAlignment.Center};
@@ -20,18 +31,22 @@ internal sealed class MixerSampleRates:Border,IDisposable
     private readonly ComboBox hardware=RateCombo([]);
     private readonly StackPanel editor=new();
     private readonly StackPanel windowsRows=new();
-    private readonly DispatcherTimer timer=new(){Interval=TimeSpan.FromSeconds(2)};
+    private readonly DispatcherTimer timer=new(){Interval=TimeSpan.FromSeconds(5)};
     private readonly Dictionary<string,TextBlock> endpointValues=[];
     private AudioEndpointFormats.Endpoint[] endpoints=[];
     private string endpointIds="";
     private bool busy,disposed;
 
-    internal MixerSampleRates(IMixerClient client,Func<DeviceSnapshot> snapshot,Func<uint,Task> setHardwareRate,bool automaticPolling=true)
+    internal MixerSampleRates(IMixerClient client,Func<DeviceSnapshot> snapshot,Func<uint,Task> setHardwareRate,bool automaticPolling=true,Func<AudioEndpointFormats.Endpoint[]>? windowsReader=null)
     {
         this.client=client;this.snapshot=snapshot;this.setHardwareRate=setHardwareRate;
+        automatic=automaticPolling;readWindows=windowsReader??AudioEndpointFormats.Read;
+        var header=new DockPanel{Margin=new Thickness(12,0,12,0),VerticalAlignment=VerticalAlignment.Center};
+        DockPanel.SetDock(expand,Dock.Right);header.Children.Add(expand);header.Children.Add(summary);HeaderView=header;
+        expand.Click+=(_,_)=>IsExpanded=!IsExpanded;
+        Visibility=Visibility.Collapsed;
         BorderBrush=new SolidColorBrush(Color.FromRgb(227,233,237));BorderThickness=new Thickness(1);CornerRadius=new CornerRadius(5);Padding=new Thickness(9);Margin=new Thickness(0,7,0,8);
-        var body=new StackPanel();Child=body;body.Children.Add(summary);
-        var expander=new Expander{Header="采样率设置",FontSize=12,Margin=new Thickness(0,5,0,0),Content=editor};body.Children.Add(expander);
+        var body=new StackPanel();Child=body;body.Children.Add(editor);
         editor.Children.Add(new TextBlock{Text="Windows 默认格式、Banana 首选值与硬件实际速率彼此独立。应用可能短暂中断音频；请逐项设置并检查回读。",FontSize=12,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,4,0,7)});
         editor.Children.Add(windowsRows);
         var bananaRow=Row("Banana 首选",banana,bananaValue);editor.Children.Add(bananaRow);
@@ -47,7 +62,13 @@ internal sealed class MixerSampleRates:Border,IDisposable
             return $"Donner 硬件已确认 {Format(rate)}。";
         });
         body.Children.Add(status);
-        timer.Tick+=(_,_)=>Refresh();if(automaticPolling)timer.Start();Refresh();
+        timer.Tick+=async(_,_)=>{if(HeaderView.IsVisible||IsVisible)await RefreshAsync();};
+        HeaderView.IsVisibleChanged+=async(_,_)=>
+        {
+            if(!automatic||disposed)return;
+            if(HeaderView.IsVisible){timer.Start();await RefreshAsync();}else timer.Stop();
+        };
+        Refresh();
     }
     private static ComboBox RateCombo(IEnumerable<uint> rates)
     {
@@ -69,7 +90,7 @@ internal sealed class MixerSampleRates:Border,IDisposable
             if(busy||disposed)return;busy=true;editor.IsEnabled=false;status.Text="正在应用并检查…";
             try{status.Text=await apply();}
             catch(Exception e){status.Text=e.Message;}
-            finally{busy=false;if(!disposed){editor.IsEnabled=true;Refresh();}}
+            finally{busy=false;if(!disposed){editor.IsEnabled=true;await RefreshAsync();}}
         };
     }
     internal async Task<string> ApplyBananaAsync(uint rate)
@@ -92,21 +113,32 @@ internal sealed class MixerSampleRates:Border,IDisposable
         var connected=client.Refresh();
         return connected?"已发送 Banana 引擎重启并恢复连接。请检查硬件实际速率和音频。":"已发送引擎重启；Banana 暂未恢复连接，请稍后检查。";
     }
+    internal async Task RefreshAsync()
+    {
+        if(disposed||reading)return;reading=true;
+        try
+        {
+            var result=await Task.Run(readWindows);
+            if(disposed)return;endpoints=result;hasWindowsSnapshot=true;windowsError=null;summary.ToolTip=null;Refresh();
+        }
+        catch(Exception error){if(!disposed){windowsError=error.Message;summary.ToolTip=error.Message;Refresh();}}
+        finally{reading=false;}
+    }
     internal void Refresh()
     {
         if(disposed)return;
         var parts=new List<string>();
         try
         {
-            endpoints=AudioEndpointFormats.Read();var ids=string.Join("|",endpoints.Select(x=>x.Id));
+            var ids=string.Join("|",endpoints.Select(x=>x.Id));
             if(ids!=endpointIds){endpointIds=ids;BuildWindowsRows();}
             foreach(var endpoint in endpoints)
             {
                 var current="默认 "+Format(endpoint.DefaultRate)+(endpoint.EngineRate==endpoint.DefaultRate?"":" / 引擎 "+Format(endpoint.EngineRate));
                 endpointValues[endpoint.Id].Text=current;
-                parts.Add($"Windows {(endpoint.Capture?"录音":"播放")} {Format(endpoint.DefaultRate)}");
+                parts.Add($"{(endpoint.Capture?"Windows 录音":"播放")} {Format(endpoint.DefaultRate)}");
             }
-            if(endpoints.Length==0)parts.Add("Windows Livejack 未连接");
+            if(endpoints.Length==0)parts.Add(windowsError is not null?"Windows 采样率读取失败":hasWindowsSnapshot?"Windows Livejack 未连接":"Windows 采样率读取中…");
         }
         catch(Exception e){parts.Add("Windows 格式读取失败");summary.ToolTip=e.Message;}
         try
@@ -124,7 +156,7 @@ internal sealed class MixerSampleRates:Border,IDisposable
             var selected=hardware.SelectedItem;hardware.ItemsSource=available;
             hardware.SelectedItem=selected is uint rate&&available.Contains(rate)?rate:device.SampleRate;
         }
-        parts.Add("Donner 实际 "+(device.Connected?Format(device.SampleRate):"未连接"));summary.Text=string.Join("  ·  ",parts);
+        parts.Add("声卡 实际 "+(device.Connected?Format(device.SampleRate):"未连接"));summary.Text=string.Join("  ·  ",parts);
     }
     private void BuildWindowsRows()
     {

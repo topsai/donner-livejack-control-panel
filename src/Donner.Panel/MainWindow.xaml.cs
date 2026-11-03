@@ -53,7 +53,7 @@ public partial class MainWindow : Window
         StreamModeCombo.ItemsSource=new[]{new DriverOption(1,"按需开启"),new DriverOption(2,"持续开启")};
         OutputFormatCombo.SelectionChanged+=(_,_)=>{if(!rendering&&OutputFormatCombo.SelectedItem is DriverOption option)selectedFormat=option.Value;};
         StreamModeCombo.SelectionChanged+=(_,_)=>{if(!rendering&&StreamModeCombo.SelectedItem is DriverOption option)selectedStreamMode=option.Value;};
-        Title="Donner 中文控制面板 · v1.27 · topsai (范斯特洛夫斯基)";
+        Title="Donner 中文控制面板 · v1.28 · topsai (范斯特洛夫斯基)";
         AboutVersion.Text="版本 "+typeof(MainWindow).Assembly.GetName().Version?.ToString(3);
         var smoke=Array.IndexOf(args,"--smoke");
         smokeDirectory=smoke>=0 && smoke+1<args.Length?Path.GetFullPath(args[smoke+1]):null;
@@ -248,7 +248,7 @@ public partial class MainWindow : Window
             try
             {
                 Directory.CreateDirectory(reconnectCheckDirectory);
-                File.WriteAllText(Path.Combine(reconnectCheckDirectory,"state.json"),JsonSerializer.Serialize(new {Version="1.27",ProcessId=Environment.ProcessId,Updated=DateTimeOffset.Now,d.Connected,d.Demo,d.Status,d.SampleRate,d.BufferSize,DeviceChanges=deviceChanges,NotificationRegistered=notifications is not null},new JsonSerializerOptions {WriteIndented=true}));
+                File.WriteAllText(Path.Combine(reconnectCheckDirectory,"state.json"),JsonSerializer.Serialize(new {Version="1.28",ProcessId=Environment.ProcessId,Updated=DateTimeOffset.Now,d.Connected,d.Demo,d.Status,d.SampleRate,d.BufferSize,DeviceChanges=deviceChanges,NotificationRegistered=notifications is not null},new JsonSerializerOptions {WriteIndented=true}));
             }
             catch(IOException){}
         }
@@ -380,9 +380,10 @@ public partial class MainWindow : Window
     private async Task Apply(Setting[] changes)
     {
         bool driverChange=changes.Any(s=>s.Kind is not ("volume" or "mute"));
-        if(driverChange){meterSuspended=true;StopMeters();}
+        if(driverChange)meterSuspended=true;var cleanup=driverChange?StopMetersAndWaitAsync():Task.CompletedTask;
         try {await Run(async()=>
         {
+            await cleanup;
             if(driverChange&&!session.Snapshot.Demo)await session.RefreshAsync();
             var reply=await session.ApplyAsync(changes);
             Record(reply.Message);
@@ -434,9 +435,10 @@ public partial class MainWindow : Window
     {
         if(busy)return;
         await FlushVolumes();
-        meterSuspended=true;StopMeters();
+        meterSuspended=true;var cleanup=StopMetersAndWaitAsync();
         try {await Run(async()=>
         {
+            await cleanup;
             if(!session.Snapshot.Demo)await session.RefreshAsync();
             var p=PresetCapture.From(session.Snapshot,PresetName.Text,session.Linked);presets.Save(p);LoadPresets();Record("已保存预设："+p.Name);
         });} finally {meterSuspended=false;}
@@ -462,8 +464,8 @@ public partial class MainWindow : Window
     private async void ApplyPresetClick(object sender,RoutedEventArgs e)
     {
         if(PresetsList.SelectedItem is not Preset p)return;await FlushVolumes();selection.Clear();selectedFormat=null;selectedStreamMode=null;
-        meterSuspended=true;StopMeters();
-        try {await Run(async()=>{if(!session.Snapshot.Demo)await session.RefreshAsync();ControlPolicy.ValidatePreset(session.Snapshot,p);var reply=await session.ApplyAsync(p.Settings);
+        meterSuspended=true;var cleanup=StopMetersAndWaitAsync();
+        try {await Run(async()=>{await cleanup;if(!session.Snapshot.Demo)await session.RefreshAsync();ControlPolicy.ValidatePreset(session.Snapshot,p);var reply=await session.ApplyAsync(p.Settings);
             if(reply.Success)session.Linked=p.Linked;Record(reply.Message);foreach(var result in reply.Results??[])Record($"{result.Operation}：{result.Message}");});}
         finally {meterSuspended=false;}
     }
@@ -502,11 +504,11 @@ public partial class MainWindow : Window
             var live=session.Snapshot;
             if(live.Connected)
             {
-                meterDevice=live.DeviceId;levels=new();
+                meterDevice=live.DeviceId;levels=new();await levels.WaitForSourcesAsync();
                 for(int i=0;i<25;i++){await Task.Delay(40);UpdateMeters();}
                 File.WriteAllText(Path.Combine(smokeDirectory!,"live-levels.json"),JsonSerializer.Serialize(new {levels.InputAvailable,levels.OutputAvailable,levels.InputPackets,levels.OutputPackets,levels.Error,Peaks=displayedPeaks},new JsonSerializerOptions {WriteIndented=true}));
                 SaveImage("levels-live.png");
-                var source=typeof(LiveLevels).GetField("input",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)?.GetValue(levels);
+                var source=typeof(LiveLevels).GetProperty("input",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)?.GetValue(levels);
                 var capture=source?.GetType().GetField("capture",System.Reflection.BindingFlags.Instance|System.Reflection.BindingFlags.NonPublic)?.GetValue(source) as NAudio.CoreAudioApi.WasapiCapture;
                 if(capture is not null&&levels.InputAvailable)
                 {

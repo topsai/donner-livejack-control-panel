@@ -45,7 +45,10 @@ internal sealed class MixerPanel:Border,IDisposable
             var names=new Button{Content="设备名称",FontSize=12,Padding=new Thickness(10,6,10,6),Margin=new Thickness(10,0,0,0)};
             DockPanel.SetDock(names,Dock.Right);heading.Children.Insert(0,names);names.Click+=(_,_)=>editNames();
         }
-        heading.Children.Add(new TextBlock{Text="调音台",FontSize=18,FontWeight=FontWeights.SemiBold,VerticalAlignment=VerticalAlignment.Center});
+        var titleAndRates=new Grid();titleAndRates.ColumnDefinitions.Add(new(){Width=GridLength.Auto});titleAndRates.ColumnDefinitions.Add(new());
+        titleAndRates.Children.Add(new TextBlock{Text="调音台",FontSize=18,FontWeight=FontWeights.SemiBold,VerticalAlignment=VerticalAlignment.Center});
+        if(sampleRates is MixerSampleRates rates){Grid.SetColumn(rates.HeaderView,1);titleAndRates.Children.Add(rates.HeaderView);}
+        heading.Children.Add(titleAndRates);
         var connection=new DockPanel{Margin=new Thickness(0,8,0,8)};body.Children.Add(connection);
         var refresh=new Button{Content="刷新设备",FontSize=12,Padding=new Thickness(10,5,10,5),Margin=new Thickness(10,0,0,0)};DockPanel.SetDock(refresh,Dock.Right);connection.Children.Add(refresh);connection.Children.Add(status);
         refresh.Click+=(_,_)=>Attempt(()=>{if(client.Refresh())RefreshDevices();Poll(true);});

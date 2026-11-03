@@ -164,42 +164,51 @@ internal static class MixerEndpointNames
         try{var value=new NAudio.CoreAudioApi.Interfaces.PropVariant{vt=31,pointerValue=pointer};device.Properties.SetValue(PropertyKeys.PKEY_Device_DeviceDesc,value);device.Properties.Commit();}
         finally{Marshal.FreeCoTaskMem(pointer);}
     }
-    internal static void Show(Window owner,string storage)
+    internal static void Show(Window owner,string storage,Action<Window>? opened=null)
     {
+        ReadBackups(Path.Combine(storage,"mixer-endpoint-names.json"));
+        bool closed=false,writing=false;
         var window=new Window{Title="音频设备名称与用途",Owner=owner,Width=850,Height=650,WindowStartupLocation=WindowStartupLocation.CenterOwner};var panel=new DockPanel{Margin=new Thickness(16)};window.Content=panel;
         var intro=new TextBlock{Text="自定义 Windows 播放 / 录音设备名称，并同步到本面板。名称修改需要管理员权限。\n不改变设备 ID、默认设备、采样率或路由；其他软件可能需要重启刷新。\n如调音台按旧名称选择硬件，请在保存后重新选择对应设备。",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,12)};DockPanel.SetDock(intro,Dock.Top);panel.Children.Add(intro);
         var actions=new StackPanel{Margin=new Thickness(0,12,0,0)};DockPanel.SetDock(actions,Dock.Bottom);panel.Children.Add(actions);var status=new TextBlock{TextWrapping=TextWrapping.Wrap};actions.Children.Add(status);var buttons=new WrapPanel();actions.Children.Add(buttons);
-        window.Closing+=(_,e)=>{if(!buttons.IsEnabled)e.Cancel=true;};
+        window.Closing+=(_,e)=>{if(writing)e.Cancel=true;else closed=true;};
         var rows=new StackPanel();panel.Children.Add(new ScrollViewer{Content=rows,VerticalScrollBarVisibility=ScrollBarVisibility.Auto});var editors=new List<(Endpoint Endpoint,TextBox Editor)>();
-        void Refresh()
+        async Task RefreshAsync()
         {
-            rows.Children.Clear();editors.Clear();
-            foreach(var endpoint in List(storage).OrderBy(x=>x.Capture).ThenBy(x=>!x.Active))
+            buttons.IsEnabled=false;rows.IsEnabled=false;
+            try
+            {
+                var endpoints=await Task.Run(()=>List(storage));if(closed)return;
+                rows.Children.Clear();editors.Clear();
+                foreach(var endpoint in endpoints.OrderBy(x=>x.Capture).ThenBy(x=>!x.Active))
             {
                 var row=new StackPanel{Margin=new Thickness(0,0,0,14)};
                 row.Children.Add(new TextBlock{Text=$"{(endpoint.Capture?"录音 / 输入":"播放 / 输出")} · {endpoint.Current}"+(endpoint.Active?"":"（未连接 / 已禁用）"),TextWrapping=TextWrapping.Wrap,FontWeight=FontWeights.SemiBold});
                 if(endpoint.Virtual)row.Children.Add(new TextBlock{Text="用途："+endpoint.Label,TextWrapping=TextWrapping.Wrap});
                 row.Children.Add(new TextBlock{Text="更名前："+endpoint.Original,TextWrapping=TextWrapping.Wrap,Opacity=.7});
                 var editor=new TextBox{Text=endpoint.Descriptor,MaxLength=120,IsEnabled=endpoint.Active,Margin=new Thickness(0,5,8,0)};row.Children.Add(editor);rows.Children.Add(row);editors.Add((endpoint,editor));
+                }
             }
+            catch(Exception e) when(e is COMException or IOException or InvalidDataException or UnauthorizedAccessException or JsonException){if(!closed)status.Text=e.Message;}
+            finally{if(!closed&&!writing){buttons.IsEnabled=true;rows.IsEnabled=true;}}
         }
         async Task Run(string command,string? request=null)
         {
-            buttons.IsEnabled=false;rows.IsEnabled=false;
+            writing=true;buttons.IsEnabled=false;rows.IsEnabled=false;status.Text="正在保存并检查…";
             try
             {
                 using var identity=WindowsIdentity.GetCurrent();
-                if(new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator))status.Text=request is null?Change(storage,command=="--restore-audio-names"):ApplyCustomRequest(storage,request);
+                if(new WindowsPrincipal(identity).IsInRole(WindowsBuiltInRole.Administrator))status.Text=await Task.Run(()=>request is null?Change(storage,command=="--restore-audio-names"):ApplyCustomRequest(storage,request));
                 else
                 {
                     Directory.CreateDirectory(storage);var report=request is null?Path.Combine(storage,"endpoint-rename-"+Guid.NewGuid().ToString("N")+".txt"):request+".txt";var start=new ProcessStartInfo(Environment.ProcessPath!){UseShellExecute=true,Verb="runas"};
                     start.ArgumentList.Add(command);if(request is not null)start.ArgumentList.Add(request);start.ArgumentList.Add(report);
                     using var process=Process.Start(start)??throw new IOException("未启动名称修改程序。");await process.WaitForExitAsync();status.Text=File.Exists(report)?File.ReadAllText(report):"未完成名称修改。";if(File.Exists(report))File.Delete(report);
                 }
-                Refresh();
+                await RefreshAsync();
             }
             catch(Exception e) when(e is COMException or IOException or InvalidDataException or UnauthorizedAccessException or JsonException or System.ComponentModel.Win32Exception){status.Text=e.Message;}
-            finally{buttons.IsEnabled=true;rows.IsEnabled=true;if(request is not null&&File.Exists(request))File.Delete(request);}
+            finally{writing=false;buttons.IsEnabled=true;rows.IsEnabled=true;if(request is not null&&File.Exists(request))File.Delete(request);}
         }
         var save=new Button{Content="保存自定义名称",Padding=new Thickness(12,8,12,8),Margin=new Thickness(0,8,10,0)};buttons.Children.Add(save);
         save.Click+=async(_,_)=>
@@ -216,6 +225,9 @@ internal static class MixerEndpointNames
         {
             var button=new Button{Content=restore?"恢复更名前名称":"简化虚拟设备名称",Padding=new Thickness(12,8,12,8),Margin=new Thickness(0,8,10,0)};buttons.Children.Add(button);button.Click+=async(_,_)=>await Run(restore?"--restore-audio-names":"--simplify-audio-names");
         }
-        Refresh();window.ShowDialog();
+        status.Text="正在读取设备…";
+        window.Loaded+=async(_,_)=>{await RefreshAsync();if(!closed&&status.Text=="正在读取设备…")status.Text="";};
+        window.Loaded+=(_,_)=>opened?.Invoke(window);
+        window.ShowDialog();
     }
 }

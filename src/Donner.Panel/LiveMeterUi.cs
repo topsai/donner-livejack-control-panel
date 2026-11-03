@@ -11,8 +11,10 @@ public partial class MainWindow
     private readonly Dictionary<(uint,uint),ChannelMeter> meterViews=[];
     private readonly float[] displayedPeaks=new float[4];
     private LiveLevels? levels;
-    private string? meterDevice;
+    private string? meterDevice,lastMeterError;
     private bool meterSuspended;
+    private Task pendingMeterCleanup=Task.CompletedTask;
+    private void TrackMeterCleanup(Task cleanup)=>pendingMeterCleanup=pendingMeterCleanup.IsCompleted?cleanup:Task.WhenAll(pendingMeterCleanup,cleanup);
     private void InitializeMeters()
     {
         meterTimer.Tick+=(_,_)=>UpdateMeters();
@@ -21,11 +23,16 @@ public partial class MainWindow
     }
     private void StopMeters()
     {
-        var previous=levels;levels=null;meterDevice=null;
+        var previous=levels;levels=null;meterDevice=null;lastMeterError=null;
         try {previous?.Dispose();}
         catch(Exception error) when(error is System.Runtime.InteropServices.COMException or InvalidOperationException or UnauthorizedAccessException) { }
+        if(previous is not null)TrackMeterCleanup(previous.WaitForSourcesAsync());
         Array.Clear(displayedPeaks);
         foreach(var view in meterViews.Values)view.Visibility=Visibility.Hidden;
+    }
+    private async Task StopMetersAndWaitAsync()
+    {
+        StopMeters();await pendingMeterCleanup;
     }
     private void MeterCheckClick(object sender,RoutedEventArgs e){StopMeters();UpdateMeters();}
     private void UpdateMeters()
@@ -39,11 +46,13 @@ public partial class MainWindow
         {
             StopMeters();meterDevice=d.DeviceId;
             meterMixerOutput=fromMixer;
-            try {levels=new(captureOutput:!fromMixer);if(levels.Error is {} error)Record("实时电平读取："+error);}
+            try {levels=new(captureOutput:!fromMixer);}
             catch(Exception error) when(error is System.Runtime.InteropServices.COMException or InvalidOperationException or UnauthorizedAccessException)
             {Record("实时电平读取："+error.Message);}
         }
         levels?.RetryStopped();
+        var currentError=levels?.Error;
+        if(currentError!=lastMeterError){lastMeterError=currentError;if(currentError is not null)Record("实时电平读取："+currentError);}
         var peaks=levels?.Read()??new float[4];
         if(fromMixer){peaks[2]=mixerLeft;peaks[3]=mixerRight;}
         foreach(var pair in meterViews)
