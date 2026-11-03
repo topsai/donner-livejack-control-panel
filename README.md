@@ -1,9 +1,10 @@
 ﻿# Donner Livejack 中文控制面板
 
 > 我手头只有 Livejack 2x2 这一个型号，所有测试均基于这台设备。
-顺手给点个 Star 
+
 作者：[topsai (范斯特洛夫斯基)](https://github.com/topsai) · 项目：[GitHub](https://github.com/topsai/donner-livejack-control-panel) · [下载最新版本](https://github.com/topsai/donner-livejack-control-panel/releases/latest) · [反馈问题](https://github.com/topsai/donner-livejack-control-panel/issues)
 
+顺手给点个 Star 
 适用于 Donner Livejack 的非官方 Windows 桌面控制面板。使用原厂驱动与控制 API，提供紧凑的中文界面，不替换声卡驱动。
 
 ![设备控制界面](docs/images/main.png)
