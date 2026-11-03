@@ -55,7 +55,7 @@ Banana 接管 Livejack 输出时，主页从实际对应的 A1/A2/A3 总线读�
 
 ### 麦克风独立参数 EQ
 
-麦克风 EQ 直接嵌入“输入混音”页面下方；点击输入 1–3 下的 **输入 1 EQ / 输入 2 EQ / 输入 3 EQ** 会选中对应输入并滚动到编辑区；选中的按钮显示蓝色，默认选择输入 1，勾选对应的 **启用输入 N EQ** 后生效。每个输入独立处理，两个声道同步调整，伴奏与其他输入原样通过。使用 Banana 的输入插入音频回调，不需要额外安装虚拟声卡。
+麦克风 EQ 直接嵌入“输入混音”页面下方；点击输入 1–3 下的 **输入 1 EQ / 输入 2 EQ / 输入 3 EQ** 会选中对应输入并滚动到编辑区；选中的按钮显示蓝色，默认选择输入 1；按钮文字后的绿点表示该输入 EQ 已启用，灰点表示未启用，勾选对应的 **启用输入 N EQ** 后生效。每个输入独立处理，两个声道同步调整，伴奏与其他输入原样通过。使用 Banana 的输入插入音频回调，不需要额外安装虚拟声卡。
 
 - 六段参数 EQ：钟形、低切、高切、低架、高架、陷波。
 - 对数频率曲线与彩色节点：左右拖动调频率，上下拖动调增益，滚轮调 Q；也可直接输入数字。
@@ -69,19 +69,19 @@ Banana 接管 Livejack 输出时，主页从实际对应的 A1/A2/A3 总线读�
 
 ![页面内输出 EQ 编辑器](docs/images/output-eq-editor.png)
 
-### v1.35 调音台截图
+### v1.36 调音台截图
 
 输入混音：
 
-![v1.35 调音台输入混音](docs/images/mixer-inputs.png)
+![v1.36 调音台输入混音](docs/images/mixer-inputs.png)
 
 输出与 EQ：
 
-![v1.35 调音台输出与 EQ](docs/images/mixer-eq.png)
+![v1.36 调音台输出与 EQ](docs/images/mixer-eq.png)
 
 ## 下载与安装
 
-推荐在 [Releases](https://github.com/topsai/donner-livejack-control-panel/releases/latest) 下载 `DonnerControlPanel-v1.35-Setup-win-x64.exe`，双击安装。安装包自带 .NET 运行时和原厂 USB 音频驱动，无需联网或另外下载驱动。
+推荐在 [Releases](https://github.com/topsai/donner-livejack-control-panel/releases/latest) 下载 `DonnerControlPanel-v1.36-Setup-win-x64.exe`，双击安装。安装包自带 .NET 运行时和原厂 USB 音频驱动，无需联网或另外下载驱动。
 
 - 已有兼容的原厂驱动：自动跳过驱动安装。
 - 缺少兼容驱动：先打开内置的原厂驱动安装向导。允许 Windows 管理员授权并完成向导后，安装程序会检查驱动，再安装中文面板。
@@ -133,7 +133,7 @@ Banana 接管 Livejack 输出时，主页从实际对应的 A1/A2/A3 总线读�
 .\build-installer.ps1 -DriverInstaller 'C:\drivers\Donner_UsbAudio_v5.0.0_2021-03-29_setup.exe'
 ```
 
-脚本验证原厂签名与 SHA-256，输出 `dist\DonnerControlPanel-v1.35-Setup-win-x64.exe`。源码仓库不保存驱动二进制。安装包内驱动为原厂 5.0.0 版本（SHA-256：`12EF3F0F517B2F00A7EBBA3DBC0CAC978E4A71ECE8599B31FFE853304DD147F0`），保持原文件；安装过程交由原厂向导执行。
+脚本验证原厂签名与 SHA-256，输出 `dist\DonnerControlPanel-v1.36-Setup-win-x64.exe`。源码仓库不保存驱动二进制。安装包内驱动为原厂 5.0.0 版本（SHA-256：`12EF3F0F517B2F00A7EBBA3DBC0CAC978E4A71ECE8599B31FFE853304DD147F0`），保持原文件；安装过程交由原厂向导执行。
 
 安装脚本的简体中文语言文件来自 [Inno Setup 仓库](https://github.com/jrsoftware/issrc/blob/main/Files/Languages/ChineseSimplified.isl)，保留作者署名。
 

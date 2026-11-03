@@ -23,6 +23,7 @@ internal sealed class MixerPanel:Border,IDisposable
     private long nextRead,nextConnection;
     private bool updating,wasConnected,disposed;
     private readonly List<Button> microphoneEqButtons=[];
+    private readonly List<System.Windows.Shapes.Ellipse> microphoneEqDots=[];
     private int selectedMicrophone;
     private readonly EqEditor inputEditor;
     private readonly EqEditor outputEditor;
@@ -33,7 +34,7 @@ internal sealed class MixerPanel:Border,IDisposable
     public MixerPanel(IMixerClient client,bool automaticPolling=true,FrameworkElement? sampleRates=null,Action? editNames=null,string? eqStorage=null)
     {
         this.client=client;microphoneEq=new(client as VoicemeeterClient,eqStorage is null?null:Path.Combine(eqStorage,"microphone-eq.json"));
-        inputEditor=new(microphoneEq,SelectedInputDevice);inputEditor.TargetChanged+=UpdateMicrophoneSelection;
+        inputEditor=new(microphoneEq,SelectedInputDevice);inputEditor.TargetChanged+=UpdateMicrophoneSelection;microphoneEq.Changed+=UpdateMicrophoneEqDot;
         outputEditor=new(new OutputEqSource(key=>pending.TryGetValue(key,out var value)?value:ReadValue(key),Queue,()=>{try{return (int)client.Get("Option.sr") is var rate&&rate>=8000?rate:48000;}catch(IOException){return 48000;}}));
         Background=new SolidColorBrush(Color.FromRgb(248,250,251));BorderBrush=new SolidColorBrush(Color.FromRgb(227,233,237));
         BorderThickness=new Thickness(1);CornerRadius=new CornerRadius(8);Padding=new Thickness(14);Margin=new Thickness(0);
@@ -121,10 +122,19 @@ internal sealed class MixerPanel:Border,IDisposable
         {
             var routes=new WrapPanel{HorizontalAlignment=HorizontalAlignment.Center,Margin=new Thickness(0,7,0,5)};box.Children.Add(routes);
             foreach(var route in MixerRules.Routes)AddCheck(routes,route,prefix+"."+route);
-            if(index<3){var micEq=new Button{Content=$"输入 {index+1} EQ",FontSize=11,Padding=new Thickness(8,4,8,4),Margin=new Thickness(0,5,0,3),Tag=$"MicrophoneEq.{index}"};box.Children.Add(micEq);microphoneEqButtons.Add(micEq);UpdateMicrophoneSelection(selectedMicrophone);micEq.Click+=(_,_)=>{inputEditor.SelectInput(index);inputEditor.BringIntoView();};}
+            if(index<3){var micEq=new Button{FontSize=11,Padding=new Thickness(8,4,8,4),Margin=new Thickness(0,5,0,3),Tag=$"MicrophoneEq.{index}"};var caption=new StackPanel{Orientation=Orientation.Horizontal};caption.Children.Add(new TextBlock{Text=$"输入 {index+1} EQ",VerticalAlignment=VerticalAlignment.Center});
+                var dot=new System.Windows.Shapes.Ellipse{Width=8,Height=8,Margin=new Thickness(8,0,0,0),VerticalAlignment=VerticalAlignment.Center,Tag=$"MicrophoneEqDot.{index}"};caption.Children.Add(dot);micEq.Content=caption;
+                box.Children.Add(micEq);microphoneEqButtons.Add(micEq);microphoneEqDots.Add(dot);UpdateMicrophoneEqDot(index);UpdateMicrophoneSelection(selectedMicrophone);micEq.Click+=(_,_)=>{inputEditor.SelectInput(index);inputEditor.BringIntoView();};}
             if(index<3){AddNumber(box,"压缩",prefix+".Comp",0,10,.1f);AddNumber(box,"噪声门",prefix+".Gate",0,10,.1f);}
             else for(int band=1;band<=3;band++)AddNumber(box,new[]{"低频","中频","高频"}[band-1],prefix+$".EQGain{band}",-12,12,.1f);
         }
+    }
+    private void UpdateMicrophoneEqDot(int index)
+    {
+        if(index<0||index>=microphoneEqDots.Count)return;
+        bool enabled=microphoneEq.IsEnabled(index);
+        microphoneEqDots[index].Fill=new SolidColorBrush(enabled?Color.FromRgb(35,198,116):Color.FromRgb(145,157,167));
+        microphoneEqDots[index].ToolTip=enabled?"EQ 已启用":"EQ 未启用";
     }
     private string SelectedInputDevice(int index)=>devices.FirstOrDefault(d=>d.Input&&d.Index==index).Combo?.SelectedItem?.ToString()??"未选择";
     private void UpdateMicrophoneSelection(int index)

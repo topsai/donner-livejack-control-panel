@@ -13,6 +13,8 @@ internal sealed class MicrophoneEqRack:IDisposable,IEqEditorSource
     private long nextMonitorAttempt;
     private readonly System.Windows.Threading.DispatcherTimer saveTimer=new(){Interval=TimeSpan.FromMilliseconds(300)};
     private bool dirty;
+    internal event Action<int>? Changed;
+    internal bool IsEnabled(int index)=>settings[index].Enabled;
     internal MicrophoneEqSettings Get(int index)=>settings[index] with{Bands=(EqBand[])settings[index].Bands.Clone()};
     internal int SampleRate=>insert?.SampleRate??48000;
     internal bool Running=>insert?.Registered==true;
@@ -50,7 +52,7 @@ internal sealed class MicrophoneEqRack:IDisposable,IEqEditorSource
                 insert.Configure(index,value);
             }
         }
-        settings[index]=value with{Bands=(EqBand[])value.Bands.Clone()};error=null;
+        settings[index]=value with{Bands=(EqBand[])value.Bands.Clone()};error=null;Changed?.Invoke(index);
         dirty=path is not null;saveTimer.Stop();if(dirty)saveTimer.Start();
     }
     private void Save()

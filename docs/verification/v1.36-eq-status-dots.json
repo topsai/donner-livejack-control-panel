@@ -1,0 +1,11 @@
+{
+  "Version": "1.36",
+  "BuildAndUiSmokePassed": true,
+  "ReadOnlyLiveCapture": {
+    "Connected": true,
+    "WriteAttempts": 0,
+    "AudioPathTested": false,
+    "Error": null
+  },
+  "DotState": "Per-input Enabled flag, green when true, gray when false; separate from selection highlight"
+}
