@@ -2,7 +2,7 @@
 
 namespace Donner.Core;
 
-public enum EqFilter { Bell,HighPass,LowPass,LowShelf,HighShelf,Notch }
+public enum EqFilter { Bell,HighPass,LowPass,LowShelf,HighShelf,Notch,BandPass }
 public sealed record EqBand(EqFilter Type,double Frequency,double Gain,double Q,bool Enabled=true);
 public sealed record MicrophoneEqSettings(bool Enabled,double Preamp,EqBand[] Bands)
 {
@@ -27,6 +27,7 @@ public readonly record struct EqCoefficients(double B0,double B1,double B2,doubl
             case EqFilter.Bell:b0=1+a*A;b1=-2*c;b2=1-a*A;a0=1+a/A;a1=-2*c;a2=1-a/A;break;
             case EqFilter.HighPass:b0=(1+c)/2;b1=-(1+c);b2=b0;a0=1+a;a1=-2*c;a2=1-a;break;
             case EqFilter.LowPass:b0=(1-c)/2;b1=1-c;b2=b0;a0=1+a;a1=-2*c;a2=1-a;break;
+            case EqFilter.BandPass:b0=a;b1=0;b2=-a;a0=1+a;a1=-2*c;a2=1-a;break;
             case EqFilter.Notch:b0=1;b1=-2*c;b2=1;a0=1+a;a1=-2*c;a2=1-a;break;
             case EqFilter.LowShelf:b0=A*((A+1)-(A-1)*c+root);b1=2*A*((A-1)-(A+1)*c);b2=A*((A+1)-(A-1)*c-root);a0=(A+1)+(A-1)*c+root;a1=-2*((A-1)+(A+1)*c);a2=(A+1)+(A-1)*c-root;break;
             case EqFilter.HighShelf:b0=A*((A+1)+(A-1)*c+root);b1=-2*A*((A-1)+(A+1)*c);b2=A*((A+1)+(A-1)*c-root);a0=(A+1)-(A-1)*c+root;a1=2*((A-1)-(A+1)*c);a2=(A+1)-(A-1)*c-root;break;

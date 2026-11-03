@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -11,6 +11,7 @@ internal sealed class EqGraph:FrameworkElement
     internal static readonly Color[] Colors=[Color.FromRgb(83,218,150),Color.FromRgb(60,201,230),Color.FromRgb(111,149,255),Color.FromRgb(206,104,241),Color.FromRgb(246,172,66),Color.FromRgb(237,105,105)];
     internal MicrophoneEqSettings Settings {get;set;}=MicrophoneEqSettings.Flat();
     internal int SampleRate {get;set;}=48000;
+    internal double MinimumQ=.1,MaximumQ=20,MaximumGain=24;
     internal int Selected {get;set;}=0;
     internal Action<int>? SelectionChanged;
     internal Action<int,EqBand>? BandChanged;
@@ -22,8 +23,8 @@ internal sealed class EqGraph:FrameworkElement
     internal double FrequencyX(double hz)=>Plot.Left+Math.Log10(Math.Clamp(hz,20,20000)/20)/3*Plot.Width;
     internal double XFrequency(double x)=>20*Math.Pow(1000,Math.Clamp((x-Plot.Left)/Plot.Width,0,1));
     private double GainY(double db)=>Plot.Top+(24-Math.Clamp(db,-24,24))/48*Plot.Height;
-    private double YGain(double y)=>Math.Clamp(24-(y-Plot.Top)/Plot.Height*48,-24,24);
-    private static double NodeGain(EqBand b)=>b.Type==EqFilter.Notch?-18:b.Type is EqFilter.HighPass or EqFilter.LowPass?0:b.Gain;
+    private double YGain(double y)=>Math.Clamp(24-(y-Plot.Top)/Plot.Height*48,-MaximumGain,MaximumGain);
+    private static double NodeGain(EqBand b)=>b.Type==EqFilter.Notch?-18:b.Type is EqFilter.HighPass or EqFilter.LowPass or EqFilter.BandPass?0:b.Gain;
     internal EqGraph(){ClipToBounds=true;Focusable=true;Cursor=Cursors.Cross;MinHeight=210;}
     private void Label(DrawingContext dc,string text,Point at,Brush? brush=null,double size=11)
     {dc.DrawText(new FormattedText(text,CultureInfo.CurrentCulture,FlowDirection.LeftToRight,new Typeface("Segoe UI"),size,brush??new SolidColorBrush(Color.FromRgb(149,158,174)),VisualTreeHelper.GetDpi(this).PixelsPerDip),at);}
@@ -86,7 +87,7 @@ internal sealed class EqGraph:FrameworkElement
     protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e){base.OnMouseLeftButtonUp(e);dragging=false;ReleaseMouseCapture();}
     protected override void OnLostMouseCapture(MouseEventArgs e){dragging=false;base.OnLostMouseCapture(e);}
     protected override void OnMouseWheel(MouseWheelEventArgs e)
-    {base.OnMouseWheel(e);var b=Settings.Bands[Selected];BandChanged?.Invoke(Selected,b with{Q=Math.Round(Math.Clamp(b.Q*Math.Pow(1.12,e.Delta/120d),.1,20),2)});e.Handled=true;}
+    {base.OnMouseWheel(e);var b=Settings.Bands[Selected];BandChanged?.Invoke(Selected,b with{Q=Math.Round(Math.Clamp(b.Q*Math.Pow(1.12,e.Delta/120d),MinimumQ,MaximumQ),2)});e.Handled=true;}
     internal void UpdateSpectrum(ReadOnlySpan<float> samples,bool available)
     {
         if(!available){hasSpectrum=false;InvalidateVisual();return;}

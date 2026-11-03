@@ -3,12 +3,11 @@ using Donner.Core;
 
 namespace Donner.Panel;
 
-internal sealed class MicrophoneEqRack:IDisposable
+internal sealed class MicrophoneEqRack:IDisposable,IEqEditorSource
 {
     private readonly VoicemeeterClient? client;
     private readonly string? path;
     private readonly MicrophoneEqSettings[] settings=[MicrophoneEqSettings.Flat(),MicrophoneEqSettings.Flat(),MicrophoneEqSettings.Flat()];
-    private MicrophoneEqWindow? editor;
     private MicrophoneEqInsert? insert;
     private string? error;
     private readonly System.Windows.Threading.DispatcherTimer saveTimer=new(){Interval=TimeSpan.FromMilliseconds(300)};
@@ -75,12 +74,14 @@ internal sealed class MicrophoneEqRack:IDisposable
     {
         if(insert is null){target.Clear();return;}insert.Preview=index;insert.CopySpectrum(target);
     }
-    internal void Show(System.Windows.Window? owner,int index)
-    {
-        if(editor is not null){editor.SelectInput(index);if(editor.WindowState==System.Windows.WindowState.Minimized)editor.WindowState=System.Windows.WindowState.Normal;editor.Activate();return;}
-        editor=new(this);editor.SelectInput(index);if(owner is not null)editor.Owner=owner;
-        editor.Closed+=(_,_)=>editor=null;editor.Show();
-    }
-    internal MicrophoneEqWindow? Editor=>editor;
-    public void Dispose(){editor?.Close();editor=null;Save();saveTimer.Stop();}
+    public bool IsOutput=>false;
+    public string[] Targets=>["硬件输入 1","硬件输入 2","硬件输入 3"];
+    int IEqEditorSource.SampleRate=>SampleRate;
+    string IEqEditorSource.Status=>Status;
+    bool IEqEditorSource.HasAudio=>HasAudio;
+    void IEqEditorSource.Maintain()=>Maintain();
+    MicrophoneEqSettings IEqEditorSource.Read(int target,int channel)=>Get(target);
+    void IEqEditorSource.Apply(int target,int channel,bool linked,MicrophoneEqSettings value)=>Set(target,value);
+    void IEqEditorSource.Spectrum(int target,Span<float> values)=>Spectrum(target,values);
+    public void Dispose(){Save();saveTimer.Stop();}
 }

@@ -15,7 +15,8 @@ public partial class MainWindow
         using(var rack=new MicrophoneEqRack(null,path))
         {
             var config=rack.Get(1);config.Bands[0]=new(EqFilter.HighPass,80,0,.707);config.Bands[2]=new(EqFilter.Bell,600,-5,1.4);config.Bands[4]=new(EqFilter.Bell,4000,3,1);
-            rack.Set(1,config);rack.Show(this,1);var editor=rack.Editor!;
+            rack.Set(1,config);using var editor=new EqEditor(rack);editor.SelectInput(1);
+            var old=MixerSlot.Content;bool oldEnabled=mixerEnabled;MixerSlot.Content=editor;mixerEnabled=true;UpdateMixerNavigation();Pages.SelectedItem=MixerPage;
             try
             {
                 await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);
@@ -35,9 +36,9 @@ public partial class MainWindow
                 {
                     var bitmap=new RenderTargetBitmap((int)editor.ActualWidth,(int)editor.ActualHeight,96,96,PixelFormats.Pbgra32);bitmap.Render(editor);var png=new PngBitmapEncoder();png.Frames.Add(BitmapFrame.Create(bitmap));using var file=File.Create(Path.Combine(smokeDirectory!,name));png.Save(file);
                 }
-                Capture("microphone-eq.png");editor.Width=820;editor.Height=530;await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);Capture("microphone-eq-compact.png");
+                Capture("microphone-eq.png");editor.Width=760;await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);Capture("microphone-eq-compact.png");
             }
-            finally{editor.Close();}
+            finally{MixerSlot.Content=old;mixerEnabled=oldEnabled;UpdateMixerNavigation();Pages.SelectedIndex=0;}
         }
         using(var restored=new MicrophoneEqRack(null,path))if(restored.Get(1).Enabled||restored.Get(1).Bands[2].Gain!=-4.5)throw new Exception("EQ参数未保存或重启擅自启用。");
         foreach(string corrupt in new[]{"[]","[null,null,null]","not json"})

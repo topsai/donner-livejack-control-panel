@@ -1,0 +1,17 @@
+{
+  "Version": "1.33",
+  "CoreChecks": 75,
+  "UI": {
+    "Success": true,
+    "NoExtraWindow": true,
+    "OutputCurveLinkedAndSingleChannel": true,
+    "ExternalReadback": true,
+    "LinkedReset": true
+  },
+  "LiveReadOnly": {
+    "Connected": true,
+    "WriteAttempts": 0,
+    "AudioPathTested": false,
+    "Error": null
+  }
+}
