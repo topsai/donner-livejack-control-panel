@@ -10,7 +10,7 @@
 
 ## 下载与安装
 
-推荐在 [Releases](https://github.com/topsai/donner-livejack-control-panel/releases/latest) 下载 `DonnerControlPanel-v1.23-Setup-win-x64.exe`，双击安装。安装包自带 .NET 运行时和原厂 USB 音频驱动，无需联网或另外下载驱动。
+推荐在 [Releases](https://github.com/topsai/donner-livejack-control-panel/releases/latest) 下载 `DonnerControlPanel-v1.24-Setup-win-x64.exe`，双击安装。安装包自带 .NET 运行时和原厂 USB 音频驱动，无需联网或另外下载驱动。
 
 - 已有兼容的原厂驱动：自动跳过驱动安装。
 - 缺少兼容驱动：先打开内置的原厂驱动安装向导。允许 Windows 管理员授权并完成向导后，安装程序会检查驱动，再安装中文面板。
@@ -34,11 +34,11 @@
 
 默认窗口为 900 × 620。音频设置与通道音量左右排列；其他页面从右上角齿轮菜单进入。
 
-启动和重连只读取设置，不自动应用预设。没有获得设备支持或未成功读取的功能不会显示。当前不包含 EQ、降噪、回环、固件升级或硬件按钮远程控制。
+启动和重连只读取设置，不自动应用预设。没有获得设备支持或未成功读取的功能不会显示。原厂设备控制不提供硬件 EQ、降噪、回环、固件升级或硬件按钮远程控制；软件混音与 EQ 可通过下方的可选调音台实现。
 
 ## 使用细节
 
-- F5：重新检测；Ctrl+S：保存预设；Ctrl+M：切换输出静音。
+- F5：重连；Ctrl+S：保存预设；Ctrl+M：切换输出静音。
 - 点击关闭按钮退出；最小化后双击托盘图标恢复。
 - 配置与日志位于 `%LOCALAPPDATA%\DonnerControlPanel`。
 - 开机启动仅对当前 Windows 用户生效，登录后在托盘运行。移动程序目录后，打开程序可更新已启用的启动项路径。
@@ -60,7 +60,7 @@
 .\build-installer.ps1 -DriverInstaller 'C:\drivers\Donner_UsbAudio_v5.0.0_2021-03-29_setup.exe'
 ```
 
-脚本验证原厂签名与 SHA-256，输出 `dist\DonnerControlPanel-v1.23-Setup-win-x64.exe`。源码仓库不保存驱动二进制。安装包内驱动为原厂 5.0.0 版本（SHA-256：`12EF3F0F517B2F00A7EBBA3DBC0CAC978E4A71ECE8599B31FFE853304DD147F0`），保持原文件；安装过程交由原厂向导执行。
+脚本验证原厂签名与 SHA-256，输出 `dist\DonnerControlPanel-v1.24-Setup-win-x64.exe`。源码仓库不保存驱动二进制。安装包内驱动为原厂 5.0.0 版本（SHA-256：`12EF3F0F517B2F00A7EBBA3DBC0CAC978E4A71ECE8599B31FFE853304DD147F0`），保持原文件；安装过程交由原厂向导执行。
 
 安装脚本的简体中文语言文件来自 [Inno Setup 仓库](https://github.com/jrsoftware/issrc/blob/main/Files/Languages/ChineseSimplified.isl)，保留作者署名。
 
@@ -93,7 +93,23 @@ dotnet run --project tests/Donner.Tests -c Release
 
 ## 可选调音台
 
-应用设置新增“启用调音台功能”，默认关闭。勾选后检测 Voicemeeter Banana，未安装时进入官方安装引导；取消引导不启用。安装包不附带 Banana。启用后，主页声卡控制下方显示中文输入混音、路由、输出和 EQ 控制。详见 [调音台使用与验证范围](docs/mixer.md)。
+应用设置中的“启用调音台功能”默认关闭，安装包不附带 Banana。勾选后检测 Voicemeeter Banana，未安装时进入官方安装引导；取消引导不启用。
+
+> 本功能面向不熟悉 Banana 等专业调音软件的用户。如果您已经安装并熟练使用 Banana，建议不要勾选；在本面板选择设备、调整路由或音效，可能改动您原有的 Banana 配置。连接时不会重置参数，但之后的操作会直接作用于 Banana。
+
+启用后，顶部“重连”前方出现“调音台”按钮，点击进入独立调音台页面，按钮变为“主页”，再次点击返回。主页保留 v1.22 的声卡控制布局；输入混音、路由、输出和 EQ 均放在调音台页面。取消勾选后隐藏入口，若正在调音台页面则返回主页。详见 [调音台使用与验证范围](docs/mixer.md)。
+
+### v1.24 调音台截图
+
+以下截图来自已连接的 Banana，仅只读采集界面，未修改现有配置。
+
+输入混音：
+
+![v1.24 调音台输入混音](docs/images/mixer-inputs.png)
+
+输出与 EQ：
+
+![v1.24 调音台输出与 EQ](docs/images/mixer-eq.png)
 
 ## 目前无法实现的硬件状态显示
 

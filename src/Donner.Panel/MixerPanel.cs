@@ -33,7 +33,7 @@ internal sealed class MixerPanel:Border,IDisposable
     public MixerPanel(IMixerClient client,bool automaticPolling=true)
     {
         this.client=client;Background=new SolidColorBrush(Color.FromRgb(248,250,251));BorderBrush=new SolidColorBrush(Color.FromRgb(227,233,237));
-        BorderThickness=new Thickness(1);CornerRadius=new CornerRadius(8);Padding=new Thickness(14);Margin=new Thickness(0,14,0,0);
+        BorderThickness=new Thickness(1);CornerRadius=new CornerRadius(8);Padding=new Thickness(14);Margin=new Thickness(0);
         var body=new StackPanel();Child=body;var heading=new DockPanel();body.Children.Add(heading);
         var open=new Button{Content="打开 Banana",FontSize=12,Padding=new Thickness(10,6,10,6),Margin=new Thickness(10,0,0,0)};DockPanel.SetDock(open,Dock.Right);heading.Children.Add(open);
         open.Click+=(_,_)=>Attempt(()=>client.Start());

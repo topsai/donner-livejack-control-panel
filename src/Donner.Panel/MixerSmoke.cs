@@ -26,6 +26,21 @@ public partial class MainWindow
         public float Level(bool input,int index)=>.04f+index*.08f;
         public void Dispose(){}
     }
+    private sealed class ReadOnlyMixer(IMixerClient inner):IMixerClient
+    {
+        internal int WriteAttempts;
+        public bool Connected=>inner.Connected;
+        public string Status=>inner.Status;
+        public bool Refresh()=>inner.Refresh();
+        public void Start(){WriteAttempts++;throw new IOException("截图期间不启动 Banana。");}
+        public float Get(string key)=>inner.Get(key);
+        public void Set(string key,float value){WriteAttempts++;throw new IOException("截图期间禁止修改 Banana 参数。");}
+        public string DeviceName(bool input,int index)=>inner.DeviceName(input,index);
+        public MixerDevice[] Devices(bool input)=>inner.Devices(input);
+        public void SetDevice(bool input,int index,MixerDevice device){WriteAttempts++;throw new IOException("截图期间禁止修改设备。");}
+        public float Level(bool input,int index)=>inner.Level(input,index);
+        public void Dispose()=>inner.Dispose();
+    }
     private static IEnumerable<T> Visuals<T>(DependencyObject parent) where T:DependencyObject
     {
         for(int i=0;i<VisualTreeHelper.GetChildrenCount(parent);i++)
@@ -36,14 +51,17 @@ public partial class MainWindow
     }
     private async Task VerifyMixer()
     {
-        if(MixerEnableCheck.IsChecked==true||MixerSlot.Visibility!=Visibility.Collapsed||mixerPanel is not null)throw new Exception("调音台未保持默认关闭。");
+        if(MixerEnableCheck.IsChecked==true||MixerPageButton.Visibility!=Visibility.Collapsed||MixerPage.Visibility!=Visibility.Collapsed||mixerPanel is not null)throw new Exception("调音台未保持默认关闭。");
         File.WriteAllText(MixerSettingsPath,"invalid json");LoadMixerPreference();UpdateMixer();
         if(mixerEnabled||MixerEnableCheck.IsChecked==true)throw new Exception("损坏设置自动启用调音台。");
         File.Delete(MixerSettingsPath);
         var fake=new TestMixer();using var panel=new MixerPanel(fake,false);
-        MixerSlot.Visibility=Visibility.Visible;MixerSlot.Content=panel;Pages.SelectedIndex=0;
+        MixerSlot.Content=panel;mixerEnabled=true;UpdateMixerNavigation();Pages.SelectedIndex=0;
+        if(Visuals<MixerPanel>(Pages).Any())throw new Exception("主页仍包含调音台。");
+        MixerPageButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        if(Pages.SelectedItem!=MixerPage||MixerPageButton.Content?.ToString()!="主页")throw new Exception("调音台按钮未切换至独立页面。");
         await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);
-        var scroll=Visuals<ScrollViewer>(Pages).First();scroll.ScrollToBottom();
+        var scroll=Visuals<ScrollViewer>(Pages).First();scroll.ScrollToTop();
         await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);panel.Poll(true);
         if(fake.Writes.Count!=0)throw new Exception("首次读取擅自更改了调音台配置。");
         panel.Queue("Strip[5].Gain",0);panel.Queue("Strip[0].Gain",float.NaN);
@@ -81,6 +99,39 @@ public partial class MainWindow
         bool rejected=false;try{await MixerSetupWindow.VerifyInstaller(Environment.ProcessPath!,CancellationToken.None);}catch(IOException){rejected=true;}
         if(!rejected)throw new Exception("未签名的程序通过安装签名验证。");
         File.WriteAllText(Path.Combine(smokeDirectory!,"mixer-checks.json"),JsonSerializer.Serialize(new{Success=true,RealBananaTested=false,OfficialInstallerSignatureTested=signatureTested,Checks=new[]{"默认关闭","无首次参数写入","推子、静音和直播路由","外部参数回读且控件复用","EQ目标及左右联动","断线禁写与恢复","取消安装引导","安装包签名校验"}},new JsonSerializerOptions{WriteIndented=true}));
-        MixerSlot.Content=null;MixerSlot.Visibility=Visibility.Collapsed;scroll.ScrollToTop();
+        MixerPageButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        if(Pages.SelectedIndex!=0||MixerPageButton.Content?.ToString()!="调音台")throw new Exception("主页按钮未返回主页。");
+        if(!ReferenceEquals(MixerSlot.Content,panel))throw new Exception("切换页面丢失调音台实例。");
+        MixerPageButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));mixerEnabled=false;UpdateMixerNavigation();
+        if(Pages.SelectedIndex!=0||MixerPageButton.Visibility!=Visibility.Collapsed)throw new Exception("停用调音台未返回主页并隐藏按钮。");
+        MixerSlot.Content=null;
+        await CaptureLiveMixer();
+    }
+    private async Task CaptureLiveMixer()
+    {
+        bool connected=false;int writes=0;string? error=null;var width=Width;var height=Height;var feedback=Feedback.Text;
+        try
+        {
+            if(VoicemeeterClient.InstalledDirectory() is null)return;
+            using var client=new ReadOnlyMixer(new VoicemeeterClient());
+            if(!client.Refresh())return;
+            connected=true;Feedback.Text="已连接 Voicemeeter Banana";using var livePanel=new MixerPanel(client,false);
+            mixerEnabled=true;UpdateMixerNavigation();MixerSlot.Content=livePanel;Pages.SelectedItem=MixerPage;
+            Width=1100;Height=820;await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);
+            livePanel.Poll(true);
+            if(!livePanel.ControlsEnabled)throw new IOException("真实 Banana 参数读取失败，未生成已连接截图。");
+            SaveImage("mixer-live-inputs.png");
+            Visuals<TabControl>(livePanel).Single().SelectedIndex=1;
+            await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);livePanel.Poll(true);
+            Visuals<ScrollViewer>(Pages).First().ScrollToTop();await Dispatcher.InvokeAsync(()=>{},DispatcherPriority.ApplicationIdle);
+            SaveImage("mixer-live-eq.png");writes=client.WriteAttempts;
+            if(writes!=0)throw new IOException("真实截图发生参数写入尝试，已阻止。");
+        }
+        catch(Exception e) when(e is IOException or System.ComponentModel.Win32Exception){error=e.Message;}
+        finally
+        {
+            MixerSlot.Content=null;mixerEnabled=false;UpdateMixerNavigation();Width=width;Height=height;Feedback.Text=feedback;
+            File.WriteAllText(Path.Combine(smokeDirectory!,"mixer-live-check.json"),JsonSerializer.Serialize(new{Connected=connected,WriteAttempts=writes,AudioPathTested=false,Error=error},new JsonSerializerOptions{WriteIndented=true}));
+        }
     }
 }

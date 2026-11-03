@@ -48,7 +48,7 @@ public partial class MainWindow
     }
     private void UpdateMixer()
     {
-        MixerSlot.Visibility=mixerEnabled?Visibility.Visible:Visibility.Collapsed;
+        UpdateMixerNavigation();
         if(!mixerEnabled)
         {
             mixerPanel?.Dispose();mixerPanel=null;nextMixerStart=0;MixerSlot.Content=null;MixerSettingsStatus.Text="已关闭；不会安装或自动启动 Banana。";return;
@@ -72,6 +72,19 @@ public partial class MainWindow
         catch(Exception error) when(error is InvalidDataException or IOException or System.ComponentModel.Win32Exception or BadImageFormatException or EntryPointNotFoundException)
         {MixerSettingsStatus.Text=error.Message;MixerSlot.Content=new TextBlock{Text=error.Message+" 请完成安装并重启 Windows，或在应用设置中重连调音台。",Margin=new Thickness(14)};}
         finally{client?.Dispose();}
+    }
+    private void UpdateMixerNavigation()
+    {
+        if(!mixerEnabled&&Pages.SelectedItem==MixerPage)Pages.SelectedIndex=0;
+        MixerPage.Visibility=mixerEnabled?Visibility.Visible:Visibility.Collapsed;
+        MixerPageButton.Visibility=mixerEnabled?Visibility.Visible:Visibility.Collapsed;
+        MixerPageButton.Content=Pages.SelectedItem==MixerPage?"主页":"调音台";
+    }
+    private void MixerPageClick(object sender,RoutedEventArgs e)
+    {
+        if(!mixerEnabled)return;
+        Pages.SelectedIndex=Pages.SelectedItem==MixerPage?0:Pages.Items.IndexOf(MixerPage);
+        UpdateMixerNavigation();
     }
     private void MixerReconnectClick(object sender,RoutedEventArgs e)
     {

@@ -4,13 +4,13 @@
    <Grid.ColumnDefinitions><ColumnDefinition Width="64"/><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
    <Image Source="Assets/donner-logo.png" Width="50" Height="50" HorizontalAlignment="Left" VerticalAlignment="Center"/>
    <StackPanel Grid.Column="1" Margin="12,0,16,0" VerticalAlignment="Center"><TextBlock x:Name="DeviceStatus" Text="正在检测设备…" FontSize="16" FontWeight="SemiBold" Foreground="White" TextWrapping="Wrap"/><TextBlock x:Name="DeviceSubtitle" Text="" Foreground="#A7C6D1" FontSize="12" TextWrapping="Wrap" Margin="0,5,0,0"/></StackPanel>
-   <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"><Button x:Name="DetectButton" Content="重连" Click="DetectClick" Background="#26424B" Foreground="White" Margin="0,0,12,0" Padding="10,8"/>
+   <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center"><Button x:Name="MixerPageButton" Content="调音台" Click="MixerPageClick" Visibility="Collapsed" Background="#26424B" Foreground="White" Margin="0,0,12,0" Padding="10,8"/><Button x:Name="DetectButton" Content="重连" Click="DetectClick" Background="#26424B" Foreground="White" Margin="0,0,12,0" Padding="10,8"/>
     <Button Content="&#xE713;" FontFamily="Segoe MDL2 Assets" FontSize="20" Width="38" Height="38" Padding="8" Margin="0" Background="#26424B" Foreground="White" ToolTip="设置与其他页面" Click="GearClick"><Button.ContextMenu><ContextMenu x:Name="PagesMenu"><MenuItem Header="设备控制" Tag="0" Click="PageClick"/><Separator/><MenuItem Header="配置预设" Tag="1" Click="PageClick"/><MenuItem Header="设备诊断" Tag="2" Click="PageClick"/><MenuItem Header="应用设置" Tag="3" Click="PageClick"/><MenuItem Header="面板说明" Tag="4" Click="PageClick"/><Separator/><MenuItem Header="关于" Tag="5" Click="PageClick"/><MenuItem Header="驱动设置" Tag="6" Click="PageClick"/></ContextMenu></Button.ContextMenu></Button>
    </StackPanel>
   </Grid></Border>
   <Grid Grid.Row="1" Margin="16,12">
    <TabControl x:Name="Pages" SelectedIndex="0" BorderThickness="0" Background="White"><TabControl.Template><ControlTemplate TargetType="TabControl"><Border Background="{TemplateBinding Background}"><ContentPresenter x:Name="PART_SelectedContentHost" ContentSource="SelectedContent"/></Border></ControlTemplate></TabControl.Template>
-    <TabItem Header="设备控制"><ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><Grid Margin="12,12"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions><Grid.ColumnDefinitions><ColumnDefinition Width="300"/><ColumnDefinition Width="14"/><ColumnDefinition/></Grid.ColumnDefinitions>
+    <TabItem Header="设备控制"><ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><Grid Margin="12,12"><Grid.ColumnDefinitions><ColumnDefinition Width="300"/><ColumnDefinition Width="14"/><ColumnDefinition/></Grid.ColumnDefinitions>
      <Border Background="#F8FAFB" BorderBrush="#E3E9ED" BorderThickness="1" CornerRadius="8" Padding="14" VerticalAlignment="Top"><StackPanel>
       <TextBlock x:Name="AudioTitle" Text="音频设置" FontSize="18" FontWeight="SemiBold"/>
       <StackPanel x:Name="RateSection" Margin="0,20,0,20"><TextBlock Text="采样率" Margin="0,0,0,8"/><StackPanel Orientation="Horizontal"><ComboBox x:Name="RateCombo" DisplayMemberPath="Label"/><Button x:Name="RateApply" Content="应用" Click="RateClick" Style="{StaticResource Primary}" Margin="0"/></StackPanel></StackPanel>
@@ -24,14 +24,14 @@
       </Grid></Border>
       <UniformGrid x:Name="ChannelsPanel" Rows="1" Margin="0,8,0,0"/>
      </StackPanel></Border>
-     <ContentControl x:Name="MixerSlot" Grid.Row="1" Grid.ColumnSpan="3" Visibility="Collapsed"/>
     </Grid></ScrollViewer></TabItem>
     <TabItem Header="配置预设"><Grid Margin="24"><Grid.ColumnDefinitions><ColumnDefinition Width="290"/><ColumnDefinition Width="24"/><ColumnDefinition/></Grid.ColumnDefinitions><ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto"><StackPanel><TextBlock Text="我的预设" FontSize="18" FontWeight="SemiBold"/><ListBox x:Name="PresetsList" DisplayMemberPath="Name" Height="260" Margin="0,16,0,12" SelectionChanged="PresetSelected"/><Button Content="删除所选预设" Click="DeletePresetClick" HorizontalAlignment="Left"/><Button Content="打开预设目录" Click="OpenPresetsClick" HorizontalAlignment="Left" Margin="0,10,0,0"/><TextBlock Text="预设保存在当前用户目录。损坏文件会报告错误，可在目录中处理。" Foreground="#657887" Margin="0,18,0,0"/></StackPanel></ScrollViewer><ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto"><StackPanel><TextBlock Text="保存当前设备设置" FontSize="18" FontWeight="SemiBold"/><TextBox x:Name="PresetName" Margin="0,16,0,12" MaxLength="60" Text="日常使用"/><Button x:Name="SavePresetButton" Content="保存预设" Style="{StaticResource Primary}" Click="SavePresetClick" HorizontalAlignment="Left"/><TextBlock Text="应用预设" FontSize="18" FontWeight="SemiBold" Margin="0,26,0,12"/><TextBlock x:Name="PresetPreview" Text="从左侧选择预设，检查内容后点击应用。" Foreground="#657887"/><Button x:Name="ApplyPresetButton" Content="应用所选预设" Click="ApplyPresetClick" Style="{StaticResource Primary}" HorizontalAlignment="Left" Margin="0,18,0,0"/></StackPanel></ScrollViewer></Grid></TabItem>
     <TabItem Header="设备诊断"><Grid Margin="24"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions><StackPanel Orientation="Horizontal" Margin="0,0,0,16"><Button Content="复制诊断摘要" Click="CopyClick"/><Button Content="导出日志" Click="ExportClick"/><Button Content="打开日志目录" Click="OpenLogsClick"/></StackPanel><TextBox x:Name="DiagnosticsText" Grid.Row="1" IsReadOnly="True" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" FontFamily="Consolas, Microsoft YaHei UI" Background="#F8FAFB"/></Grid></TabItem>
     <TabItem Header="应用设置"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="24,20"><TextBlock Text="启动设置" FontSize="18" FontWeight="SemiBold"/><CheckBox x:Name="StartupCheck" Content="随 Windows 启动" Margin="0,18,0,10" Click="StartupClick"/><TextBlock Text="登录 Windows 后在托盘运行，并自动连接声卡。双击托盘图标可打开控制面板。" Foreground="#657887"/>
      <TextBlock Text="调音台" FontSize="18" FontWeight="SemiBold" Margin="0,28,0,0"/>
      <CheckBox x:Name="MixerEnableCheck" Content="启用调音台功能" IsChecked="False" Margin="0,16,0,10" Click="MixerEnableClick"/>
-     <TextBlock Text="启用后，主页显示中文调音台，并按需启动 Voicemeeter Banana。首次使用会进入独立安装引导；默认不安装 Banana。" Foreground="#657887"/>
+     <TextBlock Text="本功能面向不熟悉 Banana 等专业调音软件的用户。如果您已经安装并熟练使用 Banana，建议不要勾选；在此面板选择设备、调整路由或音效，可能改动您原有的 Banana 配置。" Foreground="#8A5B24" Margin="0,0,0,10"/>
+     <TextBlock Text="启用后，顶部出现调音台入口，并按需启动 Voicemeeter Banana。首次使用会进入独立安装引导；默认不安装 Banana。" Foreground="#657887"/>
      <TextBlock x:Name="MixerSettingsStatus" Text="已关闭；不会安装或自动启动 Banana。" Margin="0,12,0,12"/>
      <WrapPanel><Button Content="安装引导" Click="MixerGuideClick"/><Button Content="重连调音台" Click="MixerReconnectClick"/></WrapPanel>
     </StackPanel></ScrollViewer></TabItem>
@@ -53,6 +53,7 @@
      <StackPanel x:Name="StreamModeSection" Margin="0,20,0,0"><TextBlock Text="音频流模式" Margin="0,0,0,8"/><StackPanel Orientation="Horizontal"><ComboBox x:Name="StreamModeCombo" DisplayMemberPath="Label"/><Button x:Name="StreamModeApply" Content="应用" Click="StreamModeClick" Style="{StaticResource Primary}"/></StackPanel><TextBlock Text="按需开启：音频软件使用时启动。持续开启：保持声卡音频流运行。" Foreground="#657887" Margin="0,8,0,0" TextWrapping="Wrap"/></StackPanel>
      </StackPanel></Grid>
     </StackPanel></ScrollViewer></TabItem>
+    <TabItem x:Name="MixerPage" Header="调音台" Visibility="Collapsed"><ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><ContentControl x:Name="MixerSlot" Margin="12"/></ScrollViewer></TabItem>
    </TabControl>
   </Grid>
   <Border Grid.Row="2" Background="#E5EDF0" Padding="16,8"><TextBlock x:Name="Feedback" Text="快捷键：F5 重新检测 · Ctrl+S 保存预设 · Ctrl+M 输出静音" Foreground="#425D6B"/></Border>
