@@ -87,7 +87,7 @@ internal sealed class MicrophoneEqRack:IDisposable,IEqEditorSource
         catch(Exception e) when(e is IOException or InvalidDataException){monitorError=e.Message;nextMonitorAttempt=Environment.TickCount64+2000;}
     }
     public bool IsOutput=>false;
-    public string[] Targets=>["硬件输入 1","硬件输入 2","硬件输入 3"];
+    public string[] Targets=>["输入 1","输入 2","输入 3"];
     int IEqEditorSource.SampleRate=>SampleRate;
     string IEqEditorSource.Status=>Status;
     bool IEqEditorSource.HasAudio=>HasAudio;

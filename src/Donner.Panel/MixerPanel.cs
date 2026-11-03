@@ -33,7 +33,7 @@ internal sealed class MixerPanel:Border,IDisposable
     public MixerPanel(IMixerClient client,bool automaticPolling=true,FrameworkElement? sampleRates=null,Action? editNames=null,string? eqStorage=null)
     {
         this.client=client;microphoneEq=new(client as VoicemeeterClient,eqStorage is null?null:Path.Combine(eqStorage,"microphone-eq.json"));
-        inputEditor=new(microphoneEq);inputEditor.TargetChanged+=UpdateMicrophoneSelection;
+        inputEditor=new(microphoneEq,SelectedInputDevice);inputEditor.TargetChanged+=UpdateMicrophoneSelection;
         outputEditor=new(new OutputEqSource(key=>pending.TryGetValue(key,out var value)?value:ReadValue(key),Queue,()=>{try{return (int)client.Get("Option.sr") is var rate&&rate>=8000?rate:48000;}catch(IOException){return 48000;}}));
         Background=new SolidColorBrush(Color.FromRgb(248,250,251));BorderBrush=new SolidColorBrush(Color.FromRgb(227,233,237));
         BorderThickness=new Thickness(1);CornerRadius=new CornerRadius(8);Padding=new Thickness(14);Margin=new Thickness(0);
@@ -72,11 +72,11 @@ internal sealed class MixerPanel:Border,IDisposable
     {
         var box=new StackPanel{Margin=new Thickness(4,8,4,0)};parent.Children.Add(box);
         var prefix=$"{(input?"Strip":"Bus")}[{index}]";
-        box.Children.Add(new TextBlock{Text=input?index<3?$"硬件输入 {index+1}":index==3?"电脑声音 VAIO":"电脑声音 AUX":BusName(index),FontWeight=FontWeights.SemiBold,FontSize=13,HorizontalAlignment=HorizontalAlignment.Center});
+        box.Children.Add(new TextBlock{Text=input?index<3?$"输入 {index+1}":index==3?"电脑声音 VAIO":"电脑声音 AUX":BusName(index),FontWeight=FontWeights.SemiBold,FontSize=13,HorizontalAlignment=HorizontalAlignment.Center});
         if(index<3)
         {
             var combo=new ComboBox{MinWidth=0,Height=29,FontSize=11,Margin=new Thickness(0,6,0,4),ToolTip="选择音频设备；更改会重新连接音频引擎。"};box.Children.Add(combo);devices.Add((combo,input,index));
-            combo.SelectionChanged+=(_,_)=>{if(!updating&&combo.SelectedItem is MixerDevice choice)Attempt(()=>client.SetDevice(input,index,choice));};
+            combo.SelectionChanged+=(_,_)=>{if(!updating&&combo.SelectedItem is MixerDevice choice)Attempt(()=>client.SetDevice(input,index,choice));if(input)inputEditor.RefreshTargetInfo();};
         }
         else box.Children.Add(new TextBlock{Text=input?"虚拟播放输入":"虚拟录音输出",FontSize=11,HorizontalAlignment=HorizontalAlignment.Center,Margin=new Thickness(0,10,0,8)});
         var faderRow=new Grid{Height=94};faderRow.ColumnDefinitions.Add(new());faderRow.ColumnDefinitions.Add(new(){Width=new GridLength(14)});box.Children.Add(faderRow);
@@ -121,11 +121,12 @@ internal sealed class MixerPanel:Border,IDisposable
         {
             var routes=new WrapPanel{HorizontalAlignment=HorizontalAlignment.Center,Margin=new Thickness(0,7,0,5)};box.Children.Add(routes);
             foreach(var route in MixerRules.Routes)AddCheck(routes,route,prefix+"."+route);
-            if(index<3){var micEq=new Button{Content="麦克风 EQ",FontSize=11,Padding=new Thickness(8,4,8,4),Margin=new Thickness(0,5,0,3),Tag=$"MicrophoneEq.{index}"};box.Children.Add(micEq);microphoneEqButtons.Add(micEq);UpdateMicrophoneSelection(selectedMicrophone);micEq.Click+=(_,_)=>{inputEditor.SelectInput(index);inputEditor.BringIntoView();};}
+            if(index<3){var micEq=new Button{Content=$"输入 {index+1} EQ",FontSize=11,Padding=new Thickness(8,4,8,4),Margin=new Thickness(0,5,0,3),Tag=$"MicrophoneEq.{index}"};box.Children.Add(micEq);microphoneEqButtons.Add(micEq);UpdateMicrophoneSelection(selectedMicrophone);micEq.Click+=(_,_)=>{inputEditor.SelectInput(index);inputEditor.BringIntoView();};}
             if(index<3){AddNumber(box,"压缩",prefix+".Comp",0,10,.1f);AddNumber(box,"噪声门",prefix+".Gate",0,10,.1f);}
             else for(int band=1;band<=3;band++)AddNumber(box,new[]{"低频","中频","高频"}[band-1],prefix+$".EQGain{band}",-12,12,.1f);
         }
     }
+    private string SelectedInputDevice(int index)=>devices.FirstOrDefault(d=>d.Input&&d.Index==index).Combo?.SelectedItem?.ToString()??"未选择";
     private void UpdateMicrophoneSelection(int index)
     {
         selectedMicrophone=index;
@@ -135,7 +136,7 @@ internal sealed class MixerPanel:Border,IDisposable
             button.Background=new SolidColorBrush(active?Color.FromRgb(20,119,159):Color.FromRgb(235,242,245));
             button.Foreground=active?Brushes.White:new SolidColorBrush(Color.FromRgb(22,42,52));
             button.FontWeight=active?FontWeights.SemiBold:FontWeights.Normal;
-            button.ToolTip=active?$"正在编辑硬件输入 {i+1}":$"编辑硬件输入 {i+1} 的 EQ";
+            button.ToolTip=active?$"正在编辑输入 {i+1} EQ":$"编辑输入 {i+1} 的 EQ";
         }
     }
     private void AddCheck(System.Windows.Controls.Panel parent,string caption,string key)
@@ -199,6 +200,7 @@ internal sealed class MixerPanel:Border,IDisposable
                 try{foreach(var read in readers)read();
                     foreach(var d in devices)if(!d.Combo.IsDropDownOpen&&!d.Combo.IsKeyboardFocusWithin){var name=client.DeviceName(d.Input,d.Index);if(d.Combo.SelectedItem is not MixerDevice selected||selected.Name!=name)d.Combo.SelectedItem=d.Combo.Items.Cast<MixerDevice>().FirstOrDefault(x=>x.Name==name);}}
                 finally{updating=false;}
+                inputEditor.RefreshTargetInfo();
                 nextRead=now+500;
             }
         });

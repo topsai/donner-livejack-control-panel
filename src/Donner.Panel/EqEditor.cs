@@ -12,6 +12,8 @@ namespace Donner.Panel;
 internal sealed class EqEditor:Border,IDisposable
 {
     private readonly IEqEditorSource source;
+    private readonly Func<int,string>? deviceName;
+    private readonly TextBlock deviceLabel=new(){Tag="EqDevice",FontSize=12,Foreground=new SolidColorBrush(Color.FromRgb(178,212,227)),VerticalAlignment=VerticalAlignment.Center,TextWrapping=TextWrapping.Wrap,MaxWidth=360,Margin=new Thickness(18,3,0,3)};
     private readonly ComboBox channel=new(){Width=65,MinWidth=65,ItemsSource=new[]{"左","右"},SelectedIndex=0,Foreground=Brushes.Black,Margin=new Thickness(0,0,10,0)};
     private readonly CheckBox linked=new(){Content="左右联动",IsChecked=true,Foreground=Brushes.White,VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(0,0,14,0)};
     internal readonly EqGraph Graph=new();
@@ -29,9 +31,9 @@ internal sealed class EqEditor:Border,IDisposable
     private int index,selected;
     internal int SelectedTarget=>index;
     internal event Action<int>? TargetChanged;
-    internal EqEditor(IEqEditorSource source)
+    internal EqEditor(IEqEditorSource source,Func<int,string>? deviceName=null)
     {
-        this.source=source;if(source.IsOutput)timer.Interval=TimeSpan.FromMilliseconds(500);MinWidth=0;MinHeight=480;Margin=new Thickness(0,16,0,0);Padding=new Thickness(14);CornerRadius=new CornerRadius(8);
+        this.source=source;this.deviceName=deviceName;if(source.IsOutput)timer.Interval=TimeSpan.FromMilliseconds(500);MinWidth=0;MinHeight=480;Margin=new Thickness(0,16,0,0);Padding=new Thickness(14);CornerRadius=new CornerRadius(8);
         Background=new SolidColorBrush(Color.FromRgb(22,24,31));TextElement.SetForeground(this,Brushes.White);TextElement.SetFontFamily(this,new FontFamily("Microsoft YaHei UI"));TextElement.SetFontSize(this,13);
         input.ItemsSource=source.Targets;
         enabled.Content=source.IsOutput?"启用输出 EQ":"启用麦克风 EQ";
@@ -41,7 +43,7 @@ internal sealed class EqEditor:Border,IDisposable
         var header=new DockPanel{Margin=new Thickness(0,0,0,12)};body.Children.Add(header);
         var reset=new Button{Content="恢复平直",FontSize=12,Padding=new Thickness(10,6,10,6),Margin=new Thickness(12,0,0,0)};DockPanel.SetDock(reset,Dock.Right);header.Children.Add(reset);
         var headerLeft=new WrapPanel();header.Children.Add(headerLeft);if(source.IsOutput){headerLeft.Children.Add(input);headerLeft.Children.Add(channel);headerLeft.Children.Add(linked);}headerLeft.Children.Add(enabled);
-        if(!source.IsOutput){headerLeft.Children.Add(new TextBlock{Text="输出增益",VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(20,0,8,0)});headerLeft.Children.Add(preamp);headerLeft.Children.Add(new TextBlock{Text="dB",VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(5,0,0,0)});}
+        if(!source.IsOutput){headerLeft.Children.Add(new TextBlock{Text="输出增益",VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(20,0,8,0)});headerLeft.Children.Add(preamp);headerLeft.Children.Add(new TextBlock{Text="dB",VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(5,0,0,0)});headerLeft.Children.Add(deviceLabel);}
         Grid.SetRow(Graph,1);body.Children.Add(Graph);
         var editor=new StackPanel{Margin=new Thickness(0,10,0,0)};Grid.SetRow(editor,2);body.Children.Add(editor);editor.Children.Add(bandButtons);
         for(int i=0;i<6;i++)
@@ -50,7 +52,7 @@ internal sealed class EqEditor:Border,IDisposable
         }
         var fields=new WrapPanel{Margin=new Thickness(0,10,0,0)};editor.Children.Add(fields);
         fields.Children.Add(type);fields.Children.Add(bandEnabled);AddField(fields,"频率",frequency,"Hz");AddField(fields,"增益",gain,"dB");AddField(fields,"Q",q,"");
-        editor.Children.Add(new TextBlock{Text=source.IsOutput?"拖动节点调节频率、增益；滚轮调 Q。黄色为总频响。输出增益范围 ±12 dB，Q 范围 1–100。":"拖动节点：左右调频率，上下调增益；滚轮调 Q。黄色为总频响，灰色为麦克风输入频谱（−90～0 dBFS）。",FontSize=11,Foreground=new SolidColorBrush(Color.FromRgb(146,158,178)),Margin=new Thickness(0,12,0,0),TextWrapping=TextWrapping.Wrap});
+        editor.Children.Add(new TextBlock{Text=source.IsOutput?"拖动节点调节频率、增益；滚轮调 Q。黄色为总频响。输出增益范围 ±12 dB，Q 范围 1–100。":"拖动节点：左右调频率，上下调增益；滚轮调 Q。黄色为总频响，灰色为所选输入频谱（−90～0 dBFS）。",FontSize=11,Foreground=new SolidColorBrush(Color.FromRgb(146,158,178)),Margin=new Thickness(0,12,0,0),TextWrapping=TextWrapping.Wrap});
         var footer=new StackPanel();Grid.SetRow(footer,3);body.Children.Add(footer);footer.Children.Add(status);
         footer.Children.Add(new TextBlock{Text=source.IsOutput?"处理送往所选输出总线的混合声音。左右联动仅将本次修改同步到两侧。":"只处理所选硬件输入，伴奏保持原样。切换页面后继续处理；退出 Donner 面板后恢复原声。每次启动默认旁通。",FontSize=11,Foreground=new SolidColorBrush(Color.FromRgb(146,158,178)),Margin=new Thickness(0,6,0,0),TextWrapping=TextWrapping.Wrap});
         frequency.Tag="Frequency";gain.Tag="Gain";q.Tag="Q";preamp.Tag="Preamp";
@@ -84,7 +86,14 @@ internal sealed class EqEditor:Border,IDisposable
     }
     internal void SelectInput(int value)
     {
-        index=Math.Clamp(value,0,source.Targets.Length-1);updating=true;input.SelectedIndex=index;updating=false;RefreshFields();source.Monitor(IsVisible,index);TargetChanged?.Invoke(index);
+        index=Math.Clamp(value,0,source.Targets.Length-1);updating=true;input.SelectedIndex=index;updating=false;RefreshFields();RefreshTargetInfo();source.Monitor(IsVisible,index);TargetChanged?.Invoke(index);
+    }
+    internal void RefreshTargetInfo()
+    {
+        if(source.IsOutput)return;
+        enabled.Content=$"启用输入 {index+1} EQ";
+        string text="设备："+(deviceName?.Invoke(index)??"未选择");
+        if(deviceLabel.Text!=text){deviceLabel.Text=text;deviceLabel.ToolTip=text;}
     }
     private void SelectBand(int value){selected=value;RefreshFields();}
     private void ChangeBand(EqBand value)

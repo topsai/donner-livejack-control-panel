@@ -1,0 +1,13 @@
+{
+  "Version": "1.35",
+  "UIResult": true,
+  "ConsistentInputLabels": true,
+  "FullSelectedDeviceInEqHeader": true,
+  "HeaderFollowsTargetAndDeviceChanges": true,
+  "LiveReadOnly": {
+    "Connected": true,
+    "WriteAttempts": 0,
+    "AudioPathTested": false,
+    "Error": null
+  }
+}
