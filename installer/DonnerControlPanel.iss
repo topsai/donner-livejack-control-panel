@@ -11,7 +11,7 @@
 [Setup]
 AppId={{F92AFC50-1F66-4ECF-A3E9-4F489B2086A8}
 AppName=Donner 中文控制面板
-AppVersion=1.39
+AppVersion=1.40
 AppPublisher=topsai (范斯特洛夫斯基)
 AppPublisherURL=https://github.com/topsai/donner-livejack-control-panel
 DefaultDirName={localappdata}\Programs\DonnerControlPanel
@@ -26,7 +26,7 @@ WizardStyle=modern
 SetupIconFile=..\src\Donner.Panel\Assets\donner.ico
 UninstallDisplayIcon={app}\DonnerControlPanel.exe
 OutputDir={#SetupOutput}
-OutputBaseFilename=DonnerControlPanel-v1.39-Setup-win-x64
+OutputBaseFilename=DonnerControlPanel-v1.40-Setup-win-x64
 Compression=lzma2
 SolidCompression=yes
 CloseApplications=yes
@@ -144,14 +144,4 @@ begin
     Log('Original driver installed and verified.');
 end;
 
-procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
-var
-  Command, OwnPrefix: String;
-begin
-  if CurUninstallStep = usUninstall then begin
-    OwnPrefix := '"' + ExpandConstant('{app}\DonnerControlPanel.exe') + '"';
-    if RegQueryStringValue(HKCU, StartupKey, 'DonnerControlPanel', Command) then
-      if Pos(Uppercase(OwnPrefix), Uppercase(Command)) = 1 then
-        RegDeleteValue(HKCU, StartupKey, 'DonnerControlPanel');
-  end;
-end;
+#include "UserDataCleanup.iss"

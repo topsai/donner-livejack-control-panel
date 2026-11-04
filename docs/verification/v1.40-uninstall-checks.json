@@ -1,0 +1,31 @@
+{
+  "Version": "1.40",
+  "CoreTestsPassed": 80,
+  "ShutdownChecksPassed": 5,
+  "InstallerRegression": {
+    "RealInnoInstallerAndUninstallerFixture": true,
+    "OldUninstallerReproducedDataLeftBehind": true,
+    "UpgradePreservesData": true,
+    "KeepPreservesData": true,
+    "SilentDefaultsToKeep": true,
+    "PurgeRemovesDataAndNestedPresetsAndBackups": true,
+    "StartupAndApprovalRemoved": true,
+    "OtherCopyStartupPreserved": true,
+    "ExplicitKeepWins": true,
+    "JunctionTargetPreserved": true,
+    "UnrelatedFilesPreserved": true
+  },
+  "ShutdownChecks": [
+    "Path case normalization",
+    "Different installation event isolation",
+    "Different user event isolation",
+    "No running instance succeeds",
+    "Live event closes once and acknowledges before cleanup"
+  ],
+  "Limitations": [
+    "The current user's real configuration was not deleted during testing.",
+    "Donner driver and Banana are separately installed products and are not removed with the panel.",
+    "Windows audio endpoint names, default audio device and sample rates are not reset by uninstall.",
+    "Older uninstallers gain the cleanup behavior after a covering installation of v1.40."
+  ]
+}

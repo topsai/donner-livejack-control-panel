@@ -9,6 +9,8 @@ try {
     if (!$SkipTests) {
         & $sdk run --project tests\Donner.Tests -c Release
         if ($LASTEXITCODE -ne 0) {throw 'Tests failed.'}
+        & $sdk run --project tests\Donner.Uninstall.Tests -c Release
+        if ($LASTEXITCODE -ne 0) {throw 'Uninstall shutdown tests failed.'}
     }
     & $sdk publish src\Donner.Panel -c Release -r win-x64 --self-contained true -o dist\DonnerControlPanel -v minimal
     if ($LASTEXITCODE -ne 0) {throw 'Panel publish failed.'}

@@ -18,7 +18,7 @@
 .\build-installer.ps1 -DriverInstaller 'C:\drivers\Donner_UsbAudio_v5.0.0_2021-03-29_setup.exe'
 ```
 
-脚本验证原厂签名与 SHA-256，输出 `dist\DonnerControlPanel-v1.39-Setup-win-x64.exe`。源码仓库不保存驱动二进制。安装包内驱动为原厂 5.0.0 版本（SHA-256：`12EF3F0F517B2F00A7EBBA3DBC0CAC978E4A71ECE8599B31FFE853304DD147F0`），保持原文件；安装过程交由原厂向导执行。
+脚本验证原厂签名与 SHA-256，输出 `dist\DonnerControlPanel-v1.40-Setup-win-x64.exe`。源码仓库不保存驱动二进制。安装包内驱动为原厂 5.0.0 版本（SHA-256：`12EF3F0F517B2F00A7EBBA3DBC0CAC978E4A71ECE8599B31FFE853304DD147F0`），保持原文件；安装过程交由原厂向导执行。
 
 安装脚本的简体中文语言文件来自 [Inno Setup 仓库](https://github.com/jrsoftware/issrc/blob/main/Files/Languages/ChineseSimplified.isl)，保留作者署名。
 
@@ -27,6 +27,15 @@
 ```powershell
 dotnet run --project tests/Donner.Tests -c Release
 ```
+
+卸载回归检查（仅使用 `build` 下的独立安装/数据目录与临时注册表键，不卸载当前面板或驱动）：
+
+```powershell
+dotnet run --project tests/Donner.Uninstall.Tests -c Release
+.\tests\uninstall-smoke.ps1 -Compiler 'C:\tools\Inno Setup 6\ISCC.exe'
+```
+
+静默卸载默认保留配置。需要清理时传入 `/PURGEUSERDATA=1`；传入 `/KEEPUSERDATA=1` 则保留配置，且优先于清理参数。普通交互卸载会明确询问。清理不跟随数据目录中的符号链接或目录联接；无法清理的条目会写入卸载日志，交互卸载还会提示路径。安装目录只删除安装器登记的文件，不使用 `{app}\*` 递归删除。[Inno Setup 的说明](https://jrsoftware.org/ishelp/topic_uninstalldeletesection.htm)解释了这样做的原因。
 
 界面冒烟检查：
 
@@ -54,3 +63,4 @@ dotnet run --project tests/Donner.Tests -c Release
 
 - [v1.38：配置保存、完整预设、十段输入 EQ 与输出频谱](verification/v1.38-persistence-and-eq.json)
 - [v1.39：重启引擎、预设布局与滤波器检查](verification/v1.39-ui-and-filter-checks.json)
+- [v1.40：卸载清理与配置保留检查](verification/v1.40-uninstall-checks.json)

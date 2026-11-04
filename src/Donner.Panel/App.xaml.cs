@@ -5,12 +5,15 @@ public partial class App : System.Windows.Application
     private Mutex? instanceMutex;
     private EventWaitHandle? wakeEvent;
     private RegisteredWaitHandle? wakeRegistration;
+    private UninstallShutdown? uninstallShutdown;
     protected override void OnExit(ExitEventArgs e)
-    {wakeRegistration?.Unregister(null);wakeEvent?.Dispose();if(instanceMutex is not null){instanceMutex.ReleaseMutex();instanceMutex.Dispose();}base.OnExit(e);}
+    {uninstallShutdown?.Dispose();wakeRegistration?.Unregister(null);wakeEvent?.Dispose();if(instanceMutex is not null){instanceMutex.ReleaseMutex();instanceMutex.Dispose();}base.OnExit(e);}
 
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        if(e.Args.Length==1&&e.Args[0]=="--shutdown-for-uninstall")
+        {Shutdown(UninstallShutdown.Request());return;}
         if(e.Args.Length==3&&e.Args[0]=="--set-audio-format")
         {
             if(!AudioEndpointFormats.ValidReportPath(e.Args[1],e.Args[2])){Shutdown(1);return;}
@@ -67,6 +70,8 @@ public partial class App : System.Windows.Application
             instanceMutex=mutex;wakeEvent=new(false,EventResetMode.AutoReset,@"Local\DonnerControlPanel.Wake."+identity);
             wakeRegistration=ThreadPool.RegisterWaitForSingleObject(wakeEvent,(_,_)=>Dispatcher.BeginInvoke(()=>{if(MainWindow is {} existing){existing.Show();existing.WindowState=WindowState.Normal;existing.Activate();}}),null,Timeout.Infinite,false);
         }
-        var window=new MainWindow(e.Args);MainWindow=window;window.Show();
+        var window=new MainWindow(e.Args);MainWindow=window;
+        if(instanceMutex is not null)uninstallShutdown=new(()=>Dispatcher.BeginInvoke(()=>window.Close()));
+        window.Show();
     }
 }
