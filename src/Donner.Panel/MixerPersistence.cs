@@ -39,7 +39,8 @@ internal sealed partial class MixerPanel
         {
             if(savedConfiguration is null)throw new IOException("调音台未连接且没有可保存的配置。");
             var offline=new Dictionary<string,float>(savedConfiguration.Parameters);foreach(var pair in pending)offline[pair.Key]=pair.Value;
-            return savedConfiguration with{Enabled=enabledPreference(),Parameters=offline,InputEq=microphoneEq.Capture(),View=CaptureMixerView()};
+            var offlineResult=savedConfiguration with{Enabled=enabledPreference(),Parameters=offline,InputEq=microphoneEq.Capture(),View=CaptureMixerView(),WindowsRates=CaptureWindowsRates()};
+            offlineResult.Validate();return offlineResult;
         }
         var parameters=new Dictionary<string,float>(StringComparer.Ordinal);
         foreach(string key in MixerRules.PersistentParameters)
@@ -65,9 +66,13 @@ internal sealed partial class MixerPanel
             }
         }
         foreach(var pair in pending)parameters[pair.Key]=pair.Value;
+        result=result with{Devices=bindings.ToArray(),WindowsRates=CaptureWindowsRates()};result.Validate();return result;
+    }
+    private WindowsRateBinding[] CaptureWindowsRates()
+    {
         var windows=savedConfiguration?.WindowsRates.ToDictionary(x=>x.Id)??new Dictionary<string,WindowsRateBinding>();
         foreach(var format in (settings as MixerSampleRates)?.CaptureFormats()??[])windows[format.Id]=format;
-        result=result with{Devices=bindings.ToArray(),WindowsRates=windows.Values.ToArray()};result.Validate();return result;
+        return windows.Values.ToArray();
     }
     private MixerViewState CaptureMixerView()=>new(Math.Clamp(mixerTabs?.SelectedIndex??0,0,1),inputEditor.CaptureView(),outputEditor.CaptureView(),(settings as MixerSampleRates)?.IsExpanded==true);
     internal void ApplyConfiguration(MixerConfiguration configuration)
@@ -93,7 +98,8 @@ internal sealed partial class MixerPanel
                 var slot=devices.Single(x=>x.Input==binding.Input&&x.Index==binding.Index);
                 var candidates=slot.Combo.Items.Cast<MixerDevice>().Where(x=>x.Type==binding.Type).ToArray();
                 var matches=candidates.Where(x=>binding.Id.Length>0?x.Id==binding.Id:x.Name==binding.Name).ToArray();
-                var match=matches.Length==1?matches[0]:matches.SingleOrDefault(x=>x.Name==binding.Name);
+                var named=matches.Where(x=>x.Name==binding.Name).ToArray();
+                var match=matches.Length==1?matches[0]:named.Length==1?named[0]:null;
                 if(match is null){unresolved.Add((binding.Input,binding.Index));continue;}
                 if(client.DeviceName(binding.Input,binding.Index)!=match.Name||(slot.Combo.SelectedItem as MixerDevice)?.Type!=match.Type)
                 {

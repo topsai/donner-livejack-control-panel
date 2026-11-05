@@ -18,7 +18,9 @@ internal sealed class UninstallShutdown : IDisposable
         request=new(false,EventResetMode.AutoReset,Name);
         stopped=new(false,EventResetMode.ManualReset,Name+".Stopped");
         stopped.Reset();
-        registration=ThreadPool.RegisterWaitForSingleObject(request,(_,_)=>close(),null,Timeout.Infinite,true);
+        // Closing may be cancelled while settings are being saved. Keep listening for a retry;
+        // MainWindow's closingForSave guard coalesces concurrent close requests on the dispatcher.
+        registration=ThreadPool.RegisterWaitForSingleObject(request,(_,_)=>close(),null,Timeout.Infinite,false);
     }
     internal static int Request()
     {

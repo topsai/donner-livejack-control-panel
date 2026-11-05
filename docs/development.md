@@ -18,7 +18,7 @@
 .\build-installer.ps1 -DriverInstaller 'C:\drivers\Donner_UsbAudio_v5.0.0_2021-03-29_setup.exe'
 ```
 
-脚本验证原厂签名与 SHA-256，输出 `dist\DonnerControlPanel-v1.40-Setup-win-x64.exe`。源码仓库不保存驱动二进制。安装包内驱动为原厂 5.0.0 版本（SHA-256：`12EF3F0F517B2F00A7EBBA3DBC0CAC978E4A71ECE8599B31FFE853304DD147F0`），保持原文件；安装过程交由原厂向导执行。
+脚本验证原厂签名与 SHA-256，输出 `dist\DonnerControlPanel-v1.41-Setup-win-x64.exe`。源码仓库不保存驱动二进制。安装包内驱动为原厂 5.0.0 版本（SHA-256：`12EF3F0F517B2F00A7EBBA3DBC0CAC978E4A71ECE8599B31FFE853304DD147F0`），保持原文件；安装过程交由原厂向导执行。
 
 安装脚本的简体中文语言文件来自 [Inno Setup 仓库](https://github.com/jrsoftware/issrc/blob/main/Files/Languages/ChineseSimplified.isl)，保留作者署名。
 
@@ -27,6 +27,14 @@
 ```powershell
 dotnet run --project tests/Donner.Tests -c Release
 ```
+
+调音台与安装下载生命周期回归检查：
+
+```powershell
+dotnet run --project tests/Donner.Panel.Tests -c Release
+```
+
+使用假调音台接口、独立临时配置和本地测试进程，验证离线采样率保存/导出/重开、设备消歧及安装文件清理；不会启动 Banana、修改 Windows 音频设置或连接真实声卡。正常构建会执行这组检查和卸载退出检查。
 
 卸载回归检查（仅使用 `build` 下的独立安装/数据目录与临时注册表键，不卸载当前面板或驱动）：
 
@@ -64,3 +72,4 @@ dotnet run --project tests/Donner.Uninstall.Tests -c Release
 - [v1.38：配置保存、完整预设、十段输入 EQ 与输出频谱](verification/v1.38-persistence-and-eq.json)
 - [v1.39：重启引擎、预设布局与滤波器检查](verification/v1.39-ui-and-filter-checks.json)
 - [v1.40：卸载清理与配置保留检查](verification/v1.40-uninstall-checks.json)
+- [v1.41：四项代码审查问题修复验证](verification/v1.41-review-fixes.json)

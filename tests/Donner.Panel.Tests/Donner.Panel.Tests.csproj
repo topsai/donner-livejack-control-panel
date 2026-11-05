@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0-windows</TargetFramework><UseWPF>true</UseWPF><AllowUnsafeBlocks>true</AllowUnsafeBlocks></PropertyGroup>
+  <ItemGroup><ProjectReference Include="../../src/Donner.Core/Donner.Core.csproj"/><PackageReference Include="NAudio.Wasapi" Version="2.2.1"/></ItemGroup>
+  <ItemGroup>
+    <Compile Include="../../src/Donner.Panel/MixerPanel.cs" Link="MixerPanel.cs"/>
+    <Compile Include="../../src/Donner.Panel/MixerPersistence.cs" Link="MixerPersistence.cs"/>
+    <Compile Include="../../src/Donner.Panel/EqEditor.cs" Link="EqEditor.cs"/>
+    <Compile Include="../../src/Donner.Panel/EqGraph.cs" Link="EqGraph.cs"/>
+    <Compile Include="../../src/Donner.Panel/EqEditorSource.cs" Link="EqEditorSource.cs"/>
+    <Compile Include="../../src/Donner.Panel/MicrophoneEqRack.cs" Link="MicrophoneEqRack.cs"/>
+    <Compile Include="../../src/Donner.Panel/MicrophoneEqInsert.cs" Link="MicrophoneEqInsert.cs"/>
+    <Compile Include="../../src/Donner.Panel/VoicemeeterClient.cs" Link="VoicemeeterClient.cs"/>
+    <Compile Include="../../src/Donner.Panel/MixerSampleRates.cs" Link="MixerSampleRates.cs"/>
+    <Compile Include="../../src/Donner.Panel/AudioEndpointFormats.cs" Link="AudioEndpointFormats.cs"/>
+    <Compile Include="../../src/Donner.Panel/HelperReports.cs" Link="HelperReports.cs"/>
+    <Compile Include="../../src/Donner.Panel/MixerEndpointNames.cs" Link="MixerEndpointNames.cs"/>
+    <Compile Include="../../src/Donner.Panel/ChannelMeter.cs" Link="ChannelMeter.cs"/>
+    <Compile Include="../../src/Donner.Panel/InstallerWorkspace.cs" Link="InstallerWorkspace.cs"/>
+    <Using Include="System.IO"/>
+  </ItemGroup>
+</Project>

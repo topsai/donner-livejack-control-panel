@@ -1,0 +1,42 @@
+{
+  "Version": "1.41",
+  "ReviewedPublicBase": "77ec13c7a79d014dba7997639c2bb101a225118a",
+  "CoreTestsPassed": 80,
+  "UninstallShutdownChecksPassed": 6,
+  "PanelRegressionChecksPassed": 12,
+  "BuildWarnings": 0,
+  "BuildErrors": 0,
+  "Fixes": {
+    "CR-001": "Keep listening after a cancelled close; acknowledge only actual shutdown. Retry regression reproduced before the fix and passes after it.",
+    "CR-002": "Merge latest desired Windows sample rates in both online and offline captures. Offline save, preset export/import, restart, and disconnected endpoint preservation pass.",
+    "CR-003": "Only bind a unique ID/name candidate; keep ambiguous and missing bindings unresolved. Do not guess another microphone or block unrelated buses.",
+    "CR-004": "Clean each owned download workspace on failure/cancellation and after installer exit. Wait for active installer completion before cleanup; cancel signature-verification subprocess before deleting its input."
+  },
+  "RegressionBeforeFix": {
+    "PanelChecksPassed": 4,
+    "PanelChecksFailed": 3,
+    "CancelledUninstallRetryFailed": true
+  },
+  "InstallerCleanupCases": [
+    "Download cancellation",
+    "Signature failure",
+    "Process launch failure",
+    "Cancellation before preparation",
+    "Local installer fixture retains payload while running, even after cancellation request",
+    "Payload removed only after installer exits",
+    "Unrelated files preserved"
+  ],
+  "ValidationScope": {
+    "FakeMixerAndTemporaryConfigurations": true,
+    "LocalInstallerFixtureProcess": true,
+    "InnoUninstallIsolationFixture": true,
+    "RealUserAudioSettingsModified": false,
+    "RealBananaInstalledOrRemoved": false,
+    "RealUserConfigurationDeleted": false
+  },
+  "Limitations": [
+    "No end-to-end UAC or real Banana installer UI test was performed.",
+    "Forced process termination or OS shutdown during installation is outside the normal cleanup tests.",
+    "Historical unmarked temporary directories are not removed by broad prefix matching."
+  ]
+}
