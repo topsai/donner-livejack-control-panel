@@ -53,7 +53,7 @@ public partial class MainWindow : Window
         StreamModeCombo.ItemsSource=new[]{new DriverOption(1,"按需开启"),new DriverOption(2,"持续开启")};
         OutputFormatCombo.SelectionChanged+=(_,_)=>{if(!rendering&&OutputFormatCombo.SelectedItem is DriverOption option)selectedFormat=option.Value;};
         StreamModeCombo.SelectionChanged+=(_,_)=>{if(!rendering&&StreamModeCombo.SelectedItem is DriverOption option)selectedStreamMode=option.Value;};
-        Title="Donner 中文控制面板 · v1.41 · topsai (范斯特洛夫斯基)";
+        Title="Donner 中文控制面板 · v1.42 · topsai (范斯特洛夫斯基)";
         AboutVersion.Text="版本 "+typeof(MainWindow).Assembly.GetName().Version?.ToString(3);
         var smoke=Array.IndexOf(args,"--smoke");
         smokeDirectory=smoke>=0 && smoke+1<args.Length?Path.GetFullPath(args[smoke+1]):null;
@@ -105,7 +105,7 @@ public partial class MainWindow : Window
                 catch(Exception error) when(error is IOException or UnauthorizedAccessException or System.Security.SecurityException)
                 {Record("开机启动设置无法读取或更新："+error.Message);}
             }
-            await Detect();
+            await Detect(restartMixer:false);
             refreshTimer.Start();
             if(smokeDirectory is not null) await Smoke();
         };
@@ -155,7 +155,19 @@ public partial class MainWindow : Window
         try {await action();}
         catch(Exception e) when(e is IOException or InvalidDataException or TimeoutException or JsonException or Win32Exception or UnauthorizedAccessException)
         {Record(e.Message);}
-        finally {try{if(!closed)await RestoreHardwareSession();}catch(Exception e) when(e is IOException or InvalidDataException){Record(e.Message);}busy=false;interactionLocked=false;if(!closed)Render();}
+        finally
+        {
+            try
+            {
+                if(!closed)
+                {
+                    await RestoreHardwareSession();
+                    await RestartMixerAfterDetection();
+                }
+            }
+            catch(Exception e) when(e is IOException or InvalidDataException){Record(e.Message);}
+            finally{busy=false;interactionLocked=false;if(!closed)Render();}
+        }
     }
     private bool IsOperationInput(object source)
     {
@@ -167,10 +179,15 @@ public partial class MainWindow : Window
                ReferenceEquals(node,MuteAllButton)||ReferenceEquals(node,SavePresetButton)||ReferenceEquals(node,ApplyPresetButton))return true;
         return false;
     }
-    private async Task Detect()
+    private async Task Detect(bool restartMixer=true)
     {
         if(busy)return;pending.Drain();volumeTimer.Stop();selection.Clear();selectedFormat=null;selectedStreamMode=null;
-        await Run(async()=>{await session.DetectAsync();Record(session.Snapshot.Status);});
+        await Run(async()=>
+        {
+            await session.DetectAsync();
+            if(!restartMixer)lastMixerDetection=session.HardwareDetectionVersion;
+            Record(session.Snapshot.Status);
+        });
     }
     private async Task BackgroundPoll()
     {
@@ -249,7 +266,7 @@ public partial class MainWindow : Window
             try
             {
                 Directory.CreateDirectory(reconnectCheckDirectory);
-                File.WriteAllText(Path.Combine(reconnectCheckDirectory,"state.json"),JsonSerializer.Serialize(new {Version="1.41",ProcessId=Environment.ProcessId,Updated=DateTimeOffset.Now,d.Connected,d.Demo,d.Status,d.SampleRate,d.BufferSize,DeviceChanges=deviceChanges,NotificationRegistered=notifications is not null},new JsonSerializerOptions {WriteIndented=true}));
+                File.WriteAllText(Path.Combine(reconnectCheckDirectory,"state.json"),JsonSerializer.Serialize(new {Version="1.42",ProcessId=Environment.ProcessId,Updated=DateTimeOffset.Now,d.Connected,d.Demo,d.Status,d.SampleRate,d.BufferSize,DeviceChanges=deviceChanges,NotificationRegistered=notifications is not null},new JsonSerializerOptions {WriteIndented=true}));
             }
             catch(IOException){}
         }

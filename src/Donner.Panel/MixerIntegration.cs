@@ -9,8 +9,22 @@ public partial class MainWindow
     private MixerPanel? mixerPanel;
     private bool mixerEnabled,mixerToggleBusy;
     private long nextMixerStart,nextEngineRetry;
+    private long lastMixerDetection;
     private readonly DispatcherTimer mixerRetry=new(){Interval=TimeSpan.FromSeconds(3)};
     private string MixerSettingsPath=>Path.Combine(storage,"mixer.json");
+    private async Task RestartMixerAfterDetection()
+    {
+        var detection=session.HardwareDetectionVersion;
+        if(closed||detection==lastMixerDetection||!session.Snapshot.Connected||session.Snapshot.Demo)return;
+        if(!mixerEnabled){lastMixerDetection=detection;return;}
+        var panel=mixerPanel;
+        if(panel?.Client.Connected!=true)return; // A later poll can handle this detection once Banana reconnects.
+
+        lastMixerDetection=detection;
+        try{Record("声卡重新识别 · "+await panel.RestartEngineAsync());}
+        catch(Exception error) when(error is IOException or InvalidDataException or UnauthorizedAccessException or System.ComponentModel.Win32Exception)
+        {Record("声卡已连接，Banana 引擎重启失败："+error.Message);}
+    }
     private void InitializeMixer()
     {
         Loaded+=(_,_)=>
@@ -57,6 +71,7 @@ public partial class MainWindow
         UpdateMixerNavigation();
         if(!mixerEnabled)
         {
+            lastMixerDetection=session.HardwareDetectionVersion;
             mixerPanel?.Dispose();mixerPanel=null;nextMixerStart=0;MixerSlot.Content=null;MixerSettingsStatus.Text="已关闭；不会安装或自动启动 Banana。";return;
         }
         if(mixerPanel is not null)return;

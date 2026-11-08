@@ -392,6 +392,24 @@ Test("低切高切、搁架和带通的频率位置符合双二阶公式",()=>
     }
     Check(EqCoefficients.EffectiveFrequency(20000,44100)==19845,"显示用有效频率与原有音频计算上限不一致");
 });
+Test("重新识别成功才推进硬件检测版本",()=>{
+    bool attached=true;
+    var session=new DeviceSession(request=>Task.FromResult(new HostReply(request.Id,attached,"fixture",
+        attached?device:new DeviceSnapshot())));
+    session.DetectAsync().GetAwaiter().GetResult();
+    Check(session.HardwareDetectionVersion==1,"初次识别应记录检测版本");
+    session.RefreshAsync().GetAwaiter().GetResult();
+    Check(session.HardwareDetectionVersion==1,"普通轮询不应推进检测版本");
+    session.InvalidateHardware();attached=false;
+    session.RefreshAsync().GetAwaiter().GetResult();
+    Check(session.HardwareDetectionVersion==1,"未发现设备不应推进检测版本");
+    attached=true;session.RefreshAsync().GetAwaiter().GetResult();
+    Check(session.HardwareDetectionVersion==2,"自动重连应推进检测版本");
+    session.DetectAsync().GetAwaiter().GetResult();
+    Check(session.HardwareDetectionVersion==3,"手动重连应推进检测版本");
+    session.SetDemo(true);session.RefreshAsync().GetAwaiter().GetResult();
+    Check(session.HardwareDetectionVersion==3,"演示模式不应推进检测版本");
+});
 Console.WriteLine($"热插拔结果：{passed} 通过，{failures} 失败");
 return failures==0?0:1;
 

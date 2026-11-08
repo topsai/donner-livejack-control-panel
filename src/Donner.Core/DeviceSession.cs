@@ -3,6 +3,7 @@ public sealed class DeviceSession(Func<HostRequest,Task<HostReply>> send)
 {
     public DeviceSnapshot Snapshot {get;private set;}=new();
     public bool Linked {get;set;}=true;
+    public long HardwareDetectionVersion {get;private set;}
     private int generation;
     public void InvalidateHardware()
     {
@@ -42,7 +43,8 @@ public sealed class DeviceSession(Func<HostRequest,Task<HostReply>> send)
     public async Task DetectAsync(string? path=null)
     {
         generation++;Snapshot=new();
-        await RequestAsync(new(Guid.NewGuid().ToString("N"),"detect",path));
+        var reply=await RequestAsync(new(Guid.NewGuid().ToString("N"),"detect",path));
+        if(reply.Success&&Snapshot.Connected&&!Snapshot.Demo)HardwareDetectionVersion++;
     }
     public async Task RefreshAsync(string? path=null)
     {
