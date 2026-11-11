@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 
 namespace Donner.Panel;
 
@@ -8,11 +9,8 @@ public partial class FrontPanelGuide : UserControl
 {
     private sealed record Part(string Title,string Location,string Function,string Usage);
     private readonly List<Button> markers=[];
-    public FrontPanelGuide()
-    {
-        InitializeComponent();
-        SizeChanged+=(_,_)=>MapView.MaxHeight=Math.Clamp(ActualHeight*.32,96,150);
-        var parts=new Part[]
+    private bool showingRear;
+    private static readonly Part[] FrontParts=
         {
             new("01 · INPUT 1 / DYNA MIC PREAMP","最左侧大接口","第一路组合输入：XLR 接麦克风，中央 6.35 mm 插孔接乐器或线路信号。","接吉他或贝斯时选 INST；接键盘或调音台的线路输出时选 LINE。"),
             new("02 · GAIN 1","第一路输入右上方旋钮","调节第一路输入的放大增益，决定录入电脑的信号电平。","演唱或演奏最响的段落时逐渐增加，留出余量；电平到顶或失真时降低 GAIN。"),
@@ -29,7 +27,43 @@ public partial class FrontPanelGuide : UserControl
             new("13 · 耳机输出接口","最右侧下方，耳机图标处","6.35 mm TRS 立体声耳机输出，用来听输入监听、电脑回放或二者的混合。","3.5 mm 耳机需使用立体声转接头；录人声时可用耳机监听，减少音箱声音再次进入麦克风。")
         };
         // Control centers on the front panel scan, mapped to the 1000 × 250 canvas.
-        Point[] centers=[new(96,120),new(192,74),new(192,165),new(288,120),new(384,74),new(384,165),new(492,74),new(455,165),new(519,151),new(629,112),new(787,117),new(927,71),new(913,145)];
+    private static readonly Point[] FrontCenters=[new(96,120),new(192,74),new(192,165),new(288,120),new(384,74),new(384,165),new(492,74),new(455,165),new(519,151),new(629,112),new(787,117),new(927,71),new(913,145)];
+    private static readonly Part[] RearParts=
+    [
+        new("01 · TRS 平衡输出 R","背面最左侧的 6.35 mm 接口","输出右声道的平衡线路信号。","用 6.35 mm TRS 线连接右侧有源监听音箱的平衡线路输入。"),
+        new("02 · TRS 平衡输出 L","TRS 区域右侧的 6.35 mm 接口","输出左声道的平衡线路信号。","用 6.35 mm TRS 线连接左侧有源监听音箱的平衡线路输入。"),
+        new("03 · RCA 非平衡输出 R","RCA 区域左侧接口","输出右声道的非平衡线路信号。","用 RCA 线连接音箱或功放的右声道线路输入。"),
+        new("04 · RCA 非平衡输出 L","RCA 区域右侧接口","输出左声道的非平衡线路信号。","用 RCA 线连接音箱或功放的左声道线路输入。"),
+        new("05 · MIDI IN","MIDI 区域左侧五针接口","接收外部设备发来的 MIDI 演奏和控制数据。","把键盘或控制器的 MIDI OUT 接到这里，并在音乐软件中选择对应的 MIDI 输入。"),
+        new("06 · MIDI OUT","MIDI 区域右侧五针接口","向外部设备发送 MIDI 演奏和控制数据。","把这里接到合成器或其他设备的 MIDI IN，并在音乐软件中选择对应的 MIDI 输出。"),
+        new("07 · USB-C","背面右侧 USB-C 接口","通过 USB 与电脑传输音频和 MIDI，并由 USB 为声卡供电。","使用支持数据传输的 USB 线连接电脑，在系统或录音软件中选择 LiveJack 作为音频设备。")
+    ];
+    private static readonly Point[] RearCenters=[new(113,148),new(232,148),new(329,147),new(394,147),new(492,132),new(619,132),new(745,172)];
+
+    public FrontPanelGuide()
+    {
+        InitializeComponent();
+        SizeChanged+=(_,_)=>MapView.MaxHeight=Math.Clamp(ActualHeight*.32,96,150);
+        ShowSide(false);
+    }
+
+    private void ToggleSide(object sender,RoutedEventArgs e)=>ShowSide(!showingRear);
+
+    private void ShowSide(bool rear)
+    {
+        showingRear=rear;
+        var parts=rear?RearParts:FrontParts;
+        var centers=rear?RearCenters:FrontCenters;
+        var side=rear?"背面":"正面";
+        var nextSide=rear?"正面":"背面";
+        SideButton.Content=side+" ⇄";
+        SideButton.ToolTip="切换到"+nextSide;
+        System.Windows.Automation.AutomationProperties.SetName(SideButton,$"当前显示{side}，切换到{nextSide}");
+        var asset=rear?"rear-panel.png":"front-panel.png";
+        PanelImage.ImageSource=new BitmapImage(new Uri($"pack://application:,,,/DonnerControlPanel;component/Assets/{asset}"));
+        FrontTips.Visibility=rear?Visibility.Collapsed:Visibility.Visible;
+        PanelMap.Children.Clear();
+        markers.Clear();
         for(var index=0;index<parts.Length;index++)
         {
             var target=index;
@@ -54,11 +88,23 @@ public partial class FrontPanelGuide : UserControl
     }
     internal void VerifyNavigation()
     {
+        VerifyMarkers(FrontParts.Length);
+        SideButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        if(!showingRear||!Equals(SideButton.Content,"背面 ⇄"))throw new Exception("面板没有切换到背面。");
+        VerifyMarkers(RearParts.Length);
+        SideButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        if(showingRear||!Equals(SideButton.Content,"正面 ⇄"))throw new Exception("面板没有切换回正面。");
+        VerifyMarkers(FrontParts.Length);
+        PartsPicker.SelectedIndex=0;
+    }
+
+    private void VerifyMarkers(int expectedCount)
+    {
+        if(markers.Count!=expectedCount||PartsPicker.Items.Count!=expectedCount)throw new Exception("面板编号或下拉选项数量不匹配。");
         for(var index=0;index<markers.Count;index++)
         {
             markers[index].RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             if(PartsPicker.SelectedIndex!=index||!ReferenceEquals(PartDetail.DataContext,PartsPicker.SelectedItem))throw new Exception("面板编号没有显示对应说明。");
         }
-        PartsPicker.SelectedIndex=0;
     }
 }
