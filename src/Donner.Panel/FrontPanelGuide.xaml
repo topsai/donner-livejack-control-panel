@@ -11,8 +11,8 @@
   <TextBlock Grid.Row="1" Text="点击图中编号，下方显示对应说明；选中的编号会变为绿色。" Foreground="#657887" Margin="0,6,0,10"/>
   <Border Grid.Row="2" Background="#F2F5F7" CornerRadius="8" Padding="8" Margin="0,0,0,12">
    <Viewbox x:Name="MapView" Stretch="Uniform" MaxHeight="150">
-    <Canvas x:Name="PanelMap" Width="1000" Height="246">
-     <Canvas.Background><ImageBrush ImageSource="Assets/front-panel.jpg" Viewbox="0.125,0.39,0.87,0.285" ViewboxUnits="RelativeToBoundingBox" Stretch="Fill"/></Canvas.Background>
+    <Canvas x:Name="PanelMap" Width="1000" Height="250">
+     <Canvas.Background><ImageBrush ImageSource="Assets/front-panel.png" Stretch="Fill"/></Canvas.Background>
     </Canvas>
    </Viewbox>
   </Border>
@@ -26,10 +26,14 @@
       <TextBlock Text="怎么使用" FontWeight="SemiBold"/><TextBlock Text="{Binding Usage}" Margin="0,4,0,0"/>
      </StackPanel>
     </Border>
+    <TextBlock Text="背面面板" FontWeight="SemiBold" FontSize="16"/>
+    <Border Background="#F2F5F7" CornerRadius="8" Padding="8" Margin="0,8,0,12">
+     <Image Source="Assets/rear-panel.png" Stretch="Uniform" MaxHeight="150" AutomationProperties.Name="LiveJack 2X2 背面面板"/>
+    </Border>
     <TextBlock Text="录音时怎么调？" FontWeight="SemiBold" FontSize="16"/>
     <TextBlock Text="先选好 INST / LINE，再用 GAIN 调输入电平；用 DIRECT / PLAYBACK 决定听现场输入还是电脑回放；最后用 MONITOR 或耳机旋钮调监听响度。" Margin="0,8,0,0"/>
     <TextBlock Text="如果要听录音软件里的 EQ、混响等效果，将监听偏向 PLAYBACK，并在录音软件中开启输入监听；同时听直接输入和软件监听，可能出现重音或回声。" Margin="0,8,0,14"/>
-    <TextBlock x:Name="GuideEnd" Text="图示来自你提供的说明书照片；功能按面板标识与 Donner Livejack 2x2 产品说明整理。" FontSize="12" Foreground="#657887"/>
+    <TextBlock x:Name="GuideEnd" Text="正面与背面面板图由用户 MAX2078 提供。" FontSize="12" Foreground="#657887"/>
    </StackPanel>
   </ScrollViewer>
  </Grid>

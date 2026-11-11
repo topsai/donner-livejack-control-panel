@@ -28,8 +28,8 @@ public partial class FrontPanelGuide : UserControl
             new("12 · 耳机音量旋钮","最右侧上方小旋钮","调节耳机输出的监听响度。","插入耳机前先调低，再逐渐增加；可与音箱的 MONITOR 音量分别调整。"),
             new("13 · 耳机输出接口","最右侧下方，耳机图标处","6.35 mm TRS 立体声耳机输出，用来听输入监听、电脑回放或二者的混合。","3.5 mm 耳机需使用立体声转接头；录人声时可用耳机监听，减少音箱声音再次进入麦克风。")
         };
-        // Centers on the supplied panel photograph, in the fixed 1000 x 246 map.
-        Point[] centers=[new(102,116),new(203,72),new(203,166),new(298,116),new(398,74),new(398,165),new(507,74),new(467,165),new(534,151),new(640,113),new(798,117),new(934,75),new(929,145)];
+        // Control centers on the front panel scan, mapped to the 1000 × 250 canvas.
+        Point[] centers=[new(96,120),new(192,74),new(192,165),new(288,120),new(384,74),new(384,165),new(492,74),new(455,165),new(519,151),new(629,112),new(787,117),new(927,71),new(913,145)];
         for(var index=0;index<parts.Length;index++)
         {
             var target=index;
