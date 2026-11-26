@@ -10,7 +10,7 @@
 .\build.ps1
 ```
 
-输出位于 `dist\DonnerControlPanel`。脚本先运行测试，再发布前端和辅助进程。
+输出位于 `dist\DonnerControlPanel`。脚本先运行测试，再发布前端和辅助进程。两者共用包内的 .NET 桌面运行时，可离线启动。发布包保留简体和繁体中文框架资源，其他系统语言使用框架内置的英文提示。
 
 生成包含驱动的安装包，需要 [Inno Setup 6.7.3](https://github.com/jrsoftware/issrc/releases/tag/is-6_7_3) 和原下载包中的、未经修改且带有效数字签名的 `Donner_UsbAudio_v5.0.0_2021-03-29_setup.exe`：
 
@@ -18,7 +18,7 @@
 .\build-installer.ps1 -DriverInstaller 'C:\drivers\Donner_UsbAudio_v5.0.0_2021-03-29_setup.exe'
 ```
 
-脚本验证原厂签名与 SHA-256，输出 `dist\DonnerControlPanel-v1.43-Setup-win-x64.exe`。源码仓库不保存驱动二进制。安装包内驱动为原厂 5.0.0 版本（SHA-256：`12EF3F0F517B2F00A7EBBA3DBC0CAC978E4A71ECE8599B31FFE853304DD147F0`），保持原文件；安装过程交由原厂向导执行。
+脚本验证原厂签名与 SHA-256，输出 `dist\DonnerControlPanel-v1.44-Setup-win-x64.exe`。源码仓库不保存驱动二进制。安装包内驱动为原厂 5.0.0 版本（SHA-256：`12EF3F0F517B2F00A7EBBA3DBC0CAC978E4A71ECE8599B31FFE853304DD147F0`），保持原文件；安装过程交由原厂向导执行。
 
 安装脚本的简体中文语言文件来自 [Inno Setup 仓库](https://github.com/jrsoftware/issrc/blob/main/Files/Languages/ChineseSimplified.isl)，保留作者署名。
 

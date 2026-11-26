@@ -11,7 +11,7 @@
 [Setup]
 AppId={{F92AFC50-1F66-4ECF-A3E9-4F489B2086A8}
 AppName=Donner 中文控制面板
-AppVersion=1.43
+AppVersion=1.44
 AppPublisher=topsai (范斯特洛夫斯基)
 AppPublisherURL=https://github.com/topsai/donner-livejack-control-panel
 DefaultDirName={localappdata}\Programs\DonnerControlPanel
@@ -26,8 +26,8 @@ WizardStyle=modern
 SetupIconFile=..\src\Donner.Panel\Assets\donner.ico
 UninstallDisplayIcon={app}\DonnerControlPanel.exe
 OutputDir={#SetupOutput}
-OutputBaseFilename=DonnerControlPanel-v1.43-Setup-win-x64
-Compression=lzma2
+OutputBaseFilename=DonnerControlPanel-v1.44-Setup-win-x64
+Compression=lzma2/ultra64
 SolidCompression=yes
 CloseApplications=yes
 RestartApplications=no
@@ -44,7 +44,7 @@ Name: "desktopicon"; Description: "创建桌面快捷方式"; Flags: checkedonce
 
 [Files]
 Source: "{#DriverInstaller}"; DestName: "DonnerDriverSetup.exe"; Flags: dontcopy
-Source: "{#AppFiles}\*"; DestDir: "{app}"; Excludes: "*.pdb"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#AppFiles}\*"; DestDir: "{app}"; Excludes: "*.pdb"; Flags: ignoreversion recursesubdirs
 
 [Icons]
 Name: "{group}\Donner 中文控制面板"; Filename: "{app}\DonnerControlPanel.exe"; WorkingDir: "{app}"
@@ -145,3 +145,4 @@ begin
 end;
 
 #include "UserDataCleanup.iss"
+#include "LegacyRuntimeCleanup.iss"
